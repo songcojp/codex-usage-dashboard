@@ -30,19 +30,32 @@ function renderToolbar(onChange = vi.fn()) {
 describe("FilterToolbar", () => {
   afterEach(cleanup);
 
-  test("keeps primary filters visible and discloses secondary filters", () => {
+  test("orders primary filters as date, time zone, project, and tool", () => {
+    const { container } = renderToolbar();
+
+    const primary = container.querySelector(".filter-toolbar-primary");
+    const labels = [...(primary?.querySelectorAll("input, select") ?? [])].map(
+      (control) => control.closest("label")?.querySelector("span")?.textContent
+    );
+
+    expect(labels).toEqual(["From", "To", "Time zone", "Project", "Tool"]);
+  });
+
+  test("keeps time zone visible and discloses device and model filters", () => {
     renderToolbar();
 
     expect(screen.getByLabelText("From")).toBeTruthy();
+    expect(screen.getByLabelText("Time zone")).toBeTruthy();
     expect(screen.getByLabelText("Project")).toBeTruthy();
     expect(screen.queryByLabelText("Device")).toBeNull();
+    expect(screen.queryByLabelText("Model")).toBeNull();
 
     const trigger = screen.getByRole("button", { name: "More filters" });
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(trigger);
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByLabelText("Device")).toBeTruthy();
-    expect(screen.getByLabelText("Time zone")).toBeTruthy();
+    expect(screen.getByLabelText("Model")).toBeTruthy();
   });
 
   test("secondary filters still update immediately", () => {
@@ -50,7 +63,7 @@ describe("FilterToolbar", () => {
     renderToolbar(onChange);
 
     fireEvent.click(screen.getByRole("button", { name: "More filters" }));
-    fireEvent.change(screen.getByLabelText("Time zone"), { target: { value: "UTC" } });
-    expect(onChange).toHaveBeenCalledWith("timeZone", "UTC");
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "gpt-5" } });
+    expect(onChange).toHaveBeenCalledWith("model", "gpt-5");
   });
 });

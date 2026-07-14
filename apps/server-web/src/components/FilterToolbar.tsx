@@ -54,29 +54,11 @@ export function FilterToolbar({
           </label>
         </fieldset>
         <label>
-          <span>{t("Tool")}</span>
-          <select
-            value={filters.tool ?? ""}
-            onChange={(event) => onChange("tool", event.target.value || undefined)}
-          >
-            <option value="">{t("All tools")}</option>
-            {toolOptions.map((tool) => (
-              <option key={tool.id} value={tool.slug}>
-                {tool.displayName}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>{t("Model")}</span>
-          <select
-            value={filters.model ?? ""}
-            onChange={(event) => onChange("model", event.target.value || undefined)}
-          >
-            <option value="">{t("All models")}</option>
-            {modelOptions.map((model) => (
-              <option key={model} value={model}>
-                {model}
+          <span>{t("Time zone")}</span>
+          <select value={filters.timeZone} onChange={(event) => onChange("timeZone", event.target.value)}>
+            {timeZoneOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
               </option>
             ))}
           </select>
@@ -91,6 +73,20 @@ export function FilterToolbar({
             {projectOptions.map((project) => (
               <option key={project.id} value={project.id}>
                 {project.displayName}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>{t("Tool")}</span>
+          <select
+            value={filters.tool ?? ""}
+            onChange={(event) => onChange("tool", event.target.value || undefined)}
+          >
+            <option value="">{t("All tools")}</option>
+            {toolOptions.map((tool) => (
+              <option key={tool.id} value={tool.slug}>
+                {tool.displayName}
               </option>
             ))}
           </select>
@@ -126,11 +122,15 @@ export function FilterToolbar({
             </select>
           </label>
           <label>
-            <span>{t("Time zone")}</span>
-            <select value={filters.timeZone} onChange={(event) => onChange("timeZone", event.target.value)}>
-              {timeZoneOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
+            <span>{t("Model")}</span>
+            <select
+              value={filters.model ?? ""}
+              onChange={(event) => onChange("model", event.target.value || undefined)}
+            >
+              <option value="">{t("All models")}</option>
+              {modelOptions.map((model) => (
+                <option key={model} value={model}>
+                  {model}
                 </option>
               ))}
             </select>
