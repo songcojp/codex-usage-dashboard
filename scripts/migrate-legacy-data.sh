@@ -82,8 +82,9 @@ container_psql "$source_postgres" -f - < "$repo_root/scripts/sql/legacy-source-p
 container_psql "$target_postgres" -f - < "$repo_root/scripts/sql/legacy-target-preflight.sql" >/dev/null
 
 eligible_slugs_sql="$(build_eligible_slugs_sql)"
-source_counts="$(container_psql "$source_postgres" -v "eligible_slugs_sql=$eligible_slugs_sql" -c \
-  'SELECT count(*) FILTER (WHERE t.slug IN (:eligible_slugs_sql)), count(*) FILTER (WHERE t.slug NOT IN (:eligible_slugs_sql)) FROM usage_events e JOIN tools t ON t.id = e.tool_id;')"
+source_counts="$(container_psql "$source_postgres" \
+  -v "eligible_slugs_sql=$eligible_slugs_sql" \
+  -f - < "$repo_root/scripts/sql/legacy-source-counts.sql")"
 echo "Migration preflight passed (eligible and excluded source counts: $source_counts)."
 
 if [[ "$dry_run" == "1" ]]; then

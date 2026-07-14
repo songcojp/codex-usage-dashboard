@@ -27,3 +27,6 @@ jobs:
       - run: npm run build
       - run: node --test scripts/*.test.mjs
       - run: bash -n scripts/*.sh
+      - name: Test isolated database migration
+        if: matrix.node-version == '22.13.0'
+        run: scripts/test-legacy-migration-e2e.sh

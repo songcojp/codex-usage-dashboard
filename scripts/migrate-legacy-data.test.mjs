@@ -89,6 +89,14 @@ test("source exports are read-only and filtered", async () => {
   }
 });
 
+test("source count preflight uses the same eligible slug filter", async () => {
+  const sql = await readSql("legacy-source-counts.sql");
+  assert.match(sql, /:eligible_slugs_sql/);
+  assert.match(sql, /eligible_events/);
+  assert.match(sql, /excluded_events/);
+  assert.doesNotMatch(sql, /\b(?:INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TRUNCATE)\b/i);
+});
+
 test("promotion preserves Desktop and maps old VS Code aliases", async () => {
   const sql = await readSql("legacy-target-prepare.sql");
   assert.match(sql, /'codex-desktop'\s*,\s*'codex-desktop'/);
