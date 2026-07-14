@@ -19,16 +19,25 @@ export class SerializedCycleScheduler {
   #pendingSet = new Set<WatcherCycleReason>();
   #active: WatcherCycleReason | null = null;
   #draining: Promise<void> | null = null;
+  #stopped = false;
 
   constructor(private readonly runCycle: (reason: WatcherCycleReason) => Promise<void>) {}
 
   trigger(reason: WatcherCycleReason): Promise<void> {
+    if (this.#stopped) return this.#draining ?? Promise.resolve();
     if (this.#active !== reason && !this.#pendingSet.has(reason)) {
       this.#pending.push(reason);
       this.#pendingSet.add(reason);
     }
     this.#draining ??= this.#drain();
     return this.#draining;
+  }
+
+  async stopAndWait(): Promise<void> {
+    this.#stopped = true;
+    this.#pending = [];
+    this.#pendingSet.clear();
+    await this.#draining;
   }
 
   async #drain(): Promise<void> {
@@ -82,6 +91,7 @@ export async function runWatcher(input: {
     retryTimer = setTimeout(() => void scheduler.trigger("retry").catch(reportError), delayMs);
   };
   const reportError = (error: unknown) => {
+    if (input.signal?.aborted) return;
     const category = errorCategory(error);
     input.onError?.(category);
     void persistErrorCategory(input.statePath, category);
@@ -147,7 +157,11 @@ export async function runWatcher(input: {
     if (retryTimer) clearTimeout(retryTimer);
     if (reconciliationTimer) clearInterval(reconciliationTimer);
     for (const watcher of watchers.values()) watcher.close();
-    await lock.release();
+    try {
+      await scheduler.stopAndWait();
+    } finally {
+      await lock.release();
+    }
   }
 }
 
@@ -309,6 +323,7 @@ async function attemptQueueDrain(input: {
     const result = await drainUploadQueue(input);
     return { ...result, attempted: true, errorCategory: null };
   } catch {
+    if (input.signal?.aborted) throw new Error("watcher stopped");
     return { uploaded: 0, rejected: 0, remaining: input.queue.depth, status: null, attempted: true, errorCategory: "upload-failed" };
   }
 }

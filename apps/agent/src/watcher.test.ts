@@ -6,6 +6,8 @@ import type { AgentConfig } from "./config.js";
 import { SerializedCycleScheduler, resolveExistingWatchRoots, runWatcher } from "./watcher.js";
 import { DurableQueue } from "./queue.js";
 import { initialAgentState, readAgentState, writeAgentState } from "./state.js";
+import { acquireProcessLock } from "./process-lock.js";
+import type { UsageEventDraft } from "@codex-usage-dashboard/shared";
 
 async function tempDir(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), "codex-usage-dashboard-agent-watch-"));
@@ -65,6 +67,45 @@ describe("agent watcher", () => {
     expect(reasons).toEqual(["startup", "filesystem", "reconciliation"]);
   });
 
+  it("waits for an active cycle before releasing the process lock", async () => {
+    if (process.platform !== "linux" && process.platform !== "win32") return;
+    const dir = await tempDir();
+    const statePath = path.join(dir, "state.json");
+    await writeAgentState(initialAgentState(), statePath);
+    const queue = await DurableQueue.open({ queuePath: path.join(dir, "queue.jsonl"), deadLetterPath: path.join(dir, "dead.jsonl") });
+    await queue.enqueue([queuedEvent("shutdown")]);
+    const controller = new AbortController();
+    let markFetchStarted!: () => void;
+    let releaseFetch!: () => void;
+    const fetchStarted = new Promise<void>((resolve) => { markFetchStarted = resolve; });
+    const fetchGate = new Promise<void>((resolve) => { releaseFetch = resolve; });
+    const running = runWatcher({
+      config: { ...config(path.join(dir, "missing")), toolPaths: {} },
+      configDir: dir,
+      statePath,
+      queue,
+      signal: controller.signal,
+      fetchImpl: async (_url, init) => {
+        markFetchStarted();
+        await fetchGate;
+        const body = JSON.parse(String(init?.body)) as { events: unknown[] };
+        return new Response(JSON.stringify({ inserted: body.events.length, duplicates: 0, rejected: [] }), { status: 200 });
+      }
+    });
+    let settled = false;
+    void running.catch(() => undefined).finally(() => { settled = true; });
+    await fetchStarted;
+    controller.abort();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(settled).toBe(false);
+    await expect(acquireProcessLock(dir)).rejects.toThrow(/already running/);
+    releaseFetch();
+    await expect(running).rejects.toThrow(/watcher stopped/);
+    const lock = await acquireProcessLock(dir);
+    await lock.release();
+    expect((await readAgentState(statePath)).lastErrorCategory).not.toBe("upload-failed");
+  });
+
   it("coalesces duplicate pending reasons but preserves work arriving during a cycle", async () => {
     const reasons: string[] = [];
     let release!: () => void;
@@ -103,3 +144,20 @@ describe("agent watcher", () => {
     await expect(resolveExistingWatchRoots(config(sourceFile))).resolves.toEqual([dir]);
   });
 });
+
+function queuedEvent(sourceEventId: string): UsageEventDraft {
+  return {
+    sourceEventId,
+    toolSlug: "codex-cli",
+    occurredAt: "2026-07-14T00:00:00.000Z",
+    project: { displayName: "project", repoHash: "a".repeat(64), remoteHash: null, pathHash: "b".repeat(64) },
+    model: null,
+    inputTokens: 1,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    totalTokens: 1,
+    costUsd: null,
+    metadata: {}
+  };
+}
