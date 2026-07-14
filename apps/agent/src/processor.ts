@@ -132,6 +132,7 @@ export async function drainUploadQueue(input: {
   statePath: string;
   fetchImpl?: typeof fetch;
   now?: () => Date;
+  signal?: AbortSignal;
 }): Promise<{ uploaded: number; rejected: number; remaining: number; status: number | null }> {
   const sent = await input.queue.peek(500);
   if (sent.length === 0) return { uploaded: 0, rejected: 0, remaining: 0, status: null };
@@ -139,7 +140,8 @@ export async function drainUploadQueue(input: {
     serverUrl: input.config.serverUrl,
     deviceToken: input.config.deviceToken,
     batch: createIngestBatch(input.config, sent),
-    fetchImpl: input.fetchImpl
+    fetchImpl: input.fetchImpl,
+    signal: input.signal
   });
   if (!result.ok) {
     return { uploaded: 0, rejected: 0, remaining: input.queue.depth, status: result.status };

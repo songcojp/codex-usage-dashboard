@@ -137,6 +137,7 @@ test("defines transactional preflight, backup, cutover, and rollback functions",
   assert.match(library, /loginctl show-user/);
   assert.match(library, /atomic_install_file/);
   assert.match(library, /watcherStartedAt/);
+  assert.doesNotMatch(library, /Date\.parse\(state\.lastReconciliationAt\)/);
   assert.match(library, /state\.unversioned\.json/);
   assert.match(library, /recovery-/);
   assert.match(installer, /readFileSync\(3/);
