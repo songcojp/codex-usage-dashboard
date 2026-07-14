@@ -13,6 +13,7 @@ export async function uploadIngestBatch(input: {
   deviceToken: string;
   batch: IngestBatch;
   fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
 }): Promise<UploadResult> {
   const fetchClient = input.fetchImpl ?? fetch;
   const response = await fetchClient(new URL("/api/ingest/events", input.serverUrl), {
@@ -21,7 +22,8 @@ export async function uploadIngestBatch(input: {
       authorization: `Bearer ${input.deviceToken}`,
       "content-type": "application/json"
     },
-    body: JSON.stringify(input.batch)
+    body: JSON.stringify(input.batch),
+    signal: input.signal
   });
 
   const text = await response.text();

@@ -111,7 +111,7 @@ cutover_agent_service() {
       const fs = require("node:fs");
       const [statePath, cutoverEpoch] = process.argv.slice(1);
       const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
-      process.exit(state.version === 2 && Date.parse(state.watcherStartedAt) >= Number(cutoverEpoch) * 1000 && Date.parse(state.lastReconciliationAt) >= Number(cutoverEpoch) * 1000 ? 0 : 1);
+      process.exit(state.version === 2 && Date.parse(state.watcherStartedAt) >= Number(cutoverEpoch) * 1000 ? 0 : 1);
     ' "$state_file" "$cutover_epoch" 2>/dev/null; then marker_seen=1; fi
     sleep 1
   done

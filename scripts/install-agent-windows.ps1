@@ -68,7 +68,7 @@ function Test-WatcherHealth {
     if (Test-Path $StatePath) {
       try {
         $State = Get-Content -Raw $StatePath | ConvertFrom-Json
-        if ($State.version -eq 2 -and [DateTimeOffset]::Parse($State.watcherStartedAt) -ge $StartedAfter -and [DateTimeOffset]::Parse($State.lastReconciliationAt) -ge $StartedAfter) { $MarkerSeen = $true }
+        if ($State.version -eq 2 -and [DateTimeOffset]::Parse($State.watcherStartedAt) -ge $StartedAfter) { $MarkerSeen = $true }
       } catch { }
     }
     Start-Sleep -Seconds 1

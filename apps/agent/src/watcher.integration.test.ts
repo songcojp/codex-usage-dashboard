@@ -8,6 +8,19 @@ import { runWatcherCycle } from "./watcher.js";
 import type { UsageEventDraft } from "@codex-usage-dashboard/shared";
 
 describe("watcher integration", () => {
+  it("stops an in-progress cycle when shutdown is requested", async () => {
+    const fixture = await watcherFixture();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(runWatcherCycle({
+      config: fixture.config,
+      statePath: fixture.statePath,
+      queue: fixture.queue,
+      reason: "startup",
+      signal: controller.signal
+    })).rejects.toThrow(/watcher stopped/);
+  });
+
   it("does not bypass a future upload retry deadline", async () => {
     const fixture = await watcherFixture();
     await fixture.queue.enqueue([queuedEvent("cooldown")]);

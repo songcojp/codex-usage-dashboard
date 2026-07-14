@@ -129,10 +129,10 @@ export async function runWatcher(input: {
   });
 
   try {
-    await scheduler.trigger("startup");
     const startedState = await readAgentState(input.statePath);
     startedState.watcherStartedAt = new Date().toISOString();
     await writeAgentState(startedState, input.statePath);
+    await scheduler.trigger("startup");
     reconciliationTimer = setInterval(
       () => void scheduler.trigger("reconciliation").catch(reportError),
       input.reconciliationMs ?? 6 * 60 * 60 * 1000
@@ -159,7 +159,9 @@ export async function runWatcherCycle(input: {
   nextRetryAt?: string | null;
   fetchImpl?: typeof fetch;
   now?: () => Date;
+  signal?: AbortSignal;
 }): Promise<{ filesAdvanced: number; eventsQueued: number; eventsUploaded: number; uploadStatus: number | null; uploadAttempted: boolean; errorCategory: string | null }> {
+  throwIfStopped(input.signal);
   let filesAdvanced = 0;
   let eventsQueued = 0;
   let eventsUploaded = 0;
@@ -178,10 +180,13 @@ export async function runWatcherCycle(input: {
 
   const observedIdentities = new Set<string>();
   for (const adapter of parserAdapters) {
+    throwIfStopped(input.signal);
     const parserSlug = adapter.slug as "codex-cli" | "codex-vscode-plugin";
     for (const sourceRoot of input.config.toolPaths[adapter.slug] ?? []) {
+      throwIfStopped(input.signal);
       const files = adapter.discoverFiles ? await adapter.discoverFiles(sourceRoot) : [sourceRoot];
       for (const filePath of files) {
+        throwIfStopped(input.signal);
         let observation;
         try {
           observation = await observeFile(filePath);
@@ -218,6 +223,7 @@ export async function runWatcherCycle(input: {
         observedIdentities.add(identity);
         let fileAdvanced = false;
         for (;;) {
+          throwIfStopped(input.signal);
           const processed = await processSourceFile({
             filePath,
             identity,
@@ -225,6 +231,7 @@ export async function runWatcherCycle(input: {
             statePath: input.statePath,
             queue: input.queue
           });
+          throwIfStopped(input.signal);
           if (processed.advancedLines > 0) fileAdvanced = true;
           eventsQueued += processed.queued;
           if (processed.queued > 0 && !uploadBlocked) {
@@ -295,6 +302,7 @@ async function attemptQueueDrain(input: {
   config: AgentConfig;
   statePath: string;
   fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
 }): Promise<DrainAttempt> {
   if (input.queue.depth === 0) return emptyDrain(0);
   try {
@@ -303,6 +311,10 @@ async function attemptQueueDrain(input: {
   } catch {
     return { uploaded: 0, rejected: 0, remaining: input.queue.depth, status: null, attempted: true, errorCategory: "upload-failed" };
   }
+}
+
+function throwIfStopped(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new Error("watcher stopped");
 }
 
 function emptyDrain(remaining: number): DrainAttempt {
