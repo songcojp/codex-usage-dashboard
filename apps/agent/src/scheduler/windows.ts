@@ -1,17 +1,7 @@
-export type SchedulerInterval = "daily" | "hourly";
-
 export interface SchedulerCommandTarget {
   nodePath: string;
   scriptPath: string;
   hiddenRunnerPath: string;
-}
-
-function quoteForTaskRunArg(value: string): string {
-  if (!/[\s"]/.test(value)) {
-    return value;
-  }
-
-  return `\\"${value.replace(/"/g, '\\"')}\\"`;
 }
 
 export const windowsHiddenRunnerScript = `If WScript.Arguments.Count < 1 Then WScript.Quit 1
@@ -29,19 +19,25 @@ Next
 CreateObject("WScript.Shell").Run command, 0, True
 `;
 
-export function windowsTaskCommand(
-  target: SchedulerCommandTarget,
-  interval: SchedulerInterval = "hourly"
-): string {
-  const runner = `${quoteForTaskRunArg(
-    "wscript.exe"
-  )} //B ${quoteForTaskRunArg(target.hiddenRunnerPath)} ${quoteForTaskRunArg(
-    target.nodePath
-  )} ${quoteForTaskRunArg(target.scriptPath)}`;
-  const scanSchedule = interval === "daily" ? "DAILY" : "HOURLY";
+export function windowsWatcherTaskXml(target: SchedulerCommandTarget): string {
+  const argumentsValue = ["//B", target.hiddenRunnerPath, target.nodePath, target.scriptPath]
+    .map((value) => `&quot;${escapeXml(value)}&quot;`)
+    .join(" ") + " watch";
+  return `<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <RestartOnFailure><Interval>PT30S</Interval><Count>999</Count></RestartOnFailure>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+  </Settings>
+  <Actions Context="Author">
+    <Exec><Command>wscript.exe</Command><Arguments>${argumentsValue}</Arguments></Exec>
+  </Actions>
+</Task>
+`;
+}
 
-  return [
-    `schtasks /Create /TN CodexUsageDashboardAgentWatch /SC ONLOGON /TR "${runner} watch --upload" /F`,
-    `schtasks /Create /TN CodexUsageDashboardAgentScan /SC ${scanSchedule} /TR "${runner} scan --upload" /F`
-  ].join("\n");
+function escapeXml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
