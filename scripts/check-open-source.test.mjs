@@ -44,6 +44,20 @@ test("accepts placeholders, GitHub expressions, loopback, private, and documenta
   }
 });
 
+test("accepts a public CA certificate", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "cud-scan-certificate-"));
+  try {
+    await writeFile(path.join(dir, "root.crt"), [
+      "-----BEGIN CERTIFICATE-----",
+      "MIIBpublictrustmaterialonly",
+      "-----END CERTIFICATE-----"
+    ].join("\n"));
+    assert.deepEqual(await scanOpenSourceTree(dir), []);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

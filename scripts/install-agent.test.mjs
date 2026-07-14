@@ -1,15 +1,23 @@
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { test } from "node:test";
-import { spawnSync } from "node:child_process";
+import { after, test } from "node:test";
+import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
+import { rootCertificates } from "node:tls";
+import { X509Certificate } from "node:crypto";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const scriptPath = path.join(repoRoot, "scripts", "install-agent.sh");
 const shell = resolveShell();
 const shellUnavailableReason = shell ? null : "install-agent.sh tests require bash on Windows; set BASH or add bash to PATH";
 const shellTestOptions = shellUnavailableReason ? { skip: shellUnavailableReason } : {};
+const fixtureDir = mkdtempSync(path.join(tmpdir(), "codex-usage-dashboard-agent-ca-"));
+const fixtureCaPath = path.join(fixtureDir, "root.crt");
+writeFileSync(fixtureCaPath, `${rootCertificates[0]}\n`, { mode: 0o600 });
+after(() => rmSync(fixtureDir, { recursive: true, force: true }));
 
 async function tempHome() {
   const dir = await mkdtemp(path.join(tmpdir(), "codex-usage-dashboard-agent-install-"));
@@ -27,6 +35,7 @@ function runInstaller(args, env = {}) {
       PATH: env.PATH ?? process.env.PATH,
       CODEX_USAGE_DASHBOARD_TEST_PLATFORM: env.CODEX_USAGE_DASHBOARD_TEST_PLATFORM,
       CODEX_USAGE_DASHBOARD_DEVICE_TOKEN: env.CODEX_USAGE_DASHBOARD_DEVICE_TOKEN,
+      CODEX_USAGE_DASHBOARD_CA_CERT: env.CODEX_USAGE_DASHBOARD_CA_CERT ?? fixtureCaPath,
     },
     encoding: "utf8",
   });
@@ -63,6 +72,52 @@ test("rejects a missing environment token and the removed token flag", shellTest
   assert.match(flag.stderr, /Unknown option/);
 });
 
+test("rejects a missing bundled CA certificate before installation", shellTestOptions, () => {
+  const result = runInstaller(
+    ["--server-url", "https://dashboard.example.com", "--device-name", "Workstation", "--dry-run"],
+    {
+      CODEX_USAGE_DASHBOARD_DEVICE_TOKEN: "cud_test_secret",
+      CODEX_USAGE_DASHBOARD_CA_CERT: path.join(fixtureDir, "missing.crt")
+    }
+  );
+
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /CA certificate.*missing|missing.*CA certificate/i);
+});
+
+test("repository bundles exactly one valid CA certificate without private-key material", async () => {
+  const pem = await readFile(path.join(repoRoot, "deploy", "certs", "caddy-root.crt"), "utf8");
+  const blocks = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g) ?? [];
+  assert.equal(blocks.length, 1);
+  assert.equal(new X509Certificate(blocks[0]).ca, true);
+  assert.doesNotMatch(pem, /PRIVATE KEY/);
+});
+
+test("shared server health verifier executes a real request", async () => {
+  const server = spawn(process.execPath, ["-e", [
+    "const http = require('node:http');",
+    "const server = http.createServer((request, response) => {",
+    "  response.writeHead(request.url === '/api/health' ? 200 : 404);",
+    "  response.end();",
+    "});",
+    "server.listen(0, '127.0.0.1', () => console.log(server.address().port));"
+  ].join("\n")], { stdio: ["ignore", "pipe", "inherit"] });
+
+  try {
+    const [chunk] = await once(server.stdout, "data");
+    const port = Number.parseInt(String(chunk).trim(), 10);
+    const result = spawnSync(
+      process.execPath,
+      [path.join(repoRoot, "scripts", "lib", "verify-server-health.mjs"), `http://127.0.0.1:${port}`],
+      { encoding: "utf8" }
+    );
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  } finally {
+    server.kill();
+    await once(server, "exit").catch(() => {});
+  }
+});
+
 test("prints one watcher in the Linux dry run without a timer or secret", shellTestOptions, async () => {
   const home = await tempHome();
 
@@ -91,6 +146,8 @@ test("prints one watcher in the Linux dry run without a timer or secret", shellT
     assert.doesNotMatch(result.stdout, /cud_test_secret/);
     assert.match(result.stdout, /\[REDACTED\]/);
     assert.match(result.stdout, /ExecStart=.* watch$/m);
+    assert.match(result.stdout, /Environment="NODE_EXTRA_CA_CERTS=.*server-ca\.crt"/);
+    assert.match(result.stdout, /Bundled CA certificate:/);
     assert.doesNotMatch(result.stdout, /OnCalendar|scan --upload|watch --upload|scanInterval|\.timer/);
     assert.match(result.stdout, /"codex-cli": \[/);
     assert.match(result.stdout, /\/tmp\/session\.jsonl/);
@@ -116,6 +173,10 @@ test("prints one Windows watcher task without a scheduled scan", shellTestOption
   assert.match(result.stdout, /<MultipleInstancesPolicy>IgnoreNew/);
   assert.match(result.stdout, /<Interval>PT30S/);
   assert.match(result.stdout, /watch/);
+  assert.match(result.stdout, /agent-watch\.cjs/);
+  assert.match(result.stdout, /NODE_EXTRA_CA_CERTS/);
+  assert.match(result.stdout, /<Command>.*node.*<\/Command>/);
+  assert.match(result.stdout, /<Arguments>.*agent-watch\.cjs/);
   assert.doesNotMatch(result.stdout, /scan|--upload|scanInterval/);
 });
 
@@ -141,6 +202,7 @@ test("defines transactional preflight, backup, cutover, and rollback functions",
   assert.match(library, /state\.unversioned\.json/);
   assert.match(library, /recovery-/);
   assert.match(installer, /readFileSync\(3/);
+  assert.match(installer, /if ! verify_server_tls; then[\s\S]+rm -f "\$staged_config" "\$staged_service" "\$staged_ca"/);
   assert.doesNotMatch(installer, /node - "\$target" "\$server_url" "\$device_name" "\$token"/);
 });
 
@@ -161,6 +223,7 @@ test("Linux rollback restores old files and preserves failed-cutover delivery da
     state_file="$config_dir/state.json"
     queue_file="$config_dir/queue.jsonl"
     dead_letter_file="$config_dir/dead-letter.jsonl"
+    ca_cert_file="$config_dir/server-ca.crt"
     service_file="$systemd_user_dir/codex-usage-dashboard-agent.service"
     timer_file="$systemd_user_dir/codex-usage-dashboard-agent.timer"
     watch_service_file="$systemd_user_dir/codex-usage-dashboard-agent-watch.service"
@@ -168,22 +231,27 @@ test("Linux rollback restores old files and preserves failed-cutover delivery da
     mkdir -p "$backup_dir"
     staged_config="$config_dir/.config.json.new"
     staged_service="$config_dir/.service.new"
+    staged_ca="$config_dir/.server-ca.crt.new"
     old_units=(codex-usage-dashboard-agent.timer codex-usage-dashboard-agent.service codex-usage-dashboard-agent-watch.service)
     cutover_epoch=1
     printf old-config > "$config_file"
     printf old-queue > "$queue_file"
     printf old-service > "$service_file"
+    printf old-ca > "$ca_cert_file"
     cp "$config_file" "$backup_dir/config.json"
     cp "$queue_file" "$backup_dir/queue.jsonl"
     cp "$service_file" "$backup_dir/codex-usage-dashboard-agent.service"
+    cp "$ca_cert_file" "$backup_dir/server-ca.crt"
     printf new-config > "$staged_config"
     printf new-service > "$staged_service"
+    printf new-ca > "$staged_ca"
     if cutover_agent_service; then exit 10; fi
     printf new-undelivered > "$queue_file"
     rollback_agent_install
     [[ "$(cat "$config_file")" == old-config ]]
     [[ "$(cat "$queue_file")" == old-queue ]]
     [[ "$(cat "$service_file")" == old-service ]]
+    [[ "$(cat "$ca_cert_file")" == old-ca ]]
     grep -Rqx new-undelivered "$backup_dir"/queue.jsonl.recovery-*
   `;
 
@@ -213,6 +281,11 @@ test("Windows installer backs up, health-checks, removes old scan after health, 
   assert.ok(source.indexOf("Test-WatcherHealth") < source.lastIndexOf("/Delete /TN $OldTask"));
   assert.match(source, /Restore-PreviousTasks/);
   assert.match(source, /\.recovery/);
+  assert.match(source, /BundledCaPath/);
+  assert.match(source, /server-ca\.crt/);
+  assert.match(source, /agent-watch\.cjs/);
+  assert.match(source, /NODE_EXTRA_CA_CERTS/);
+  assert.doesNotMatch(source, /\/d \/s \/c/);
   assert.doesNotMatch(source, /--upload|scan --upload/);
 });
 

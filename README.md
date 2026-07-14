@@ -25,6 +25,8 @@ Run the API and web development servers with `npm run dev:server` and `npm run d
 
 Create a device token in the dashboard, then pass it through the environment. It is never accepted as a command-line argument:
 
+Private-HTTPS installations use the deployment's committed Caddy root certificate at `deploy/certs/caddy-root.crt`. The installers validate and copy it, configure Node trust, and verify `/api/health` automatically. When rotating the Caddy CA, replace this public certificate and reinstall every agent; never copy or commit `root.key`.
+
 ```bash
 export CODEX_USAGE_DASHBOARD_DEVICE_TOKEN='cud_replace_with_device_token'
 scripts/install-agent.sh \
