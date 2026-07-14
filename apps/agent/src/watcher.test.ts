@@ -3,7 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { AgentConfig } from "./config.js";
-import { SerializedCycleScheduler, resolveExistingWatchRoots } from "./watcher.js";
+import { SerializedCycleScheduler, resolveExistingWatchRoots, runWatcher } from "./watcher.js";
+import { DurableQueue } from "./queue.js";
+import { initialAgentState, readAgentState, writeAgentState } from "./state.js";
 
 async function tempDir(): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), "codex-usage-dashboard-agent-watch-"));
@@ -21,6 +23,24 @@ function config(sourcePath: string): AgentConfig {
 }
 
 describe("agent watcher", () => {
+  it("writes a startup marker only after the locked startup cycle", async () => {
+    if (process.platform !== "linux" && process.platform !== "win32") return;
+    const dir = await tempDir();
+    const statePath = path.join(dir, "state.json");
+    await writeAgentState(initialAgentState(), statePath);
+    const queue = await DurableQueue.open({ queuePath: path.join(dir, "queue.jsonl"), deadLetterPath: path.join(dir, "dead.jsonl") });
+    const controller = new AbortController();
+    controller.abort();
+    await expect(runWatcher({
+      config: { ...config(path.join(dir, "missing")), toolPaths: {} },
+      configDir: dir,
+      statePath,
+      queue,
+      signal: controller.signal
+    })).rejects.toThrow(/watcher stopped/);
+    expect((await readAgentState(statePath)).watcherStartedAt).not.toBeNull();
+  });
+
   it("serializes filesystem and reconciliation cycles", async () => {
     const reasons: string[] = [];
     let concurrent = 0;

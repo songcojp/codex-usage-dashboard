@@ -130,6 +130,9 @@ export async function runWatcher(input: {
 
   try {
     await scheduler.trigger("startup");
+    const startedState = await readAgentState(input.statePath);
+    startedState.watcherStartedAt = new Date().toISOString();
+    await writeAgentState(startedState, input.statePath);
     reconciliationTimer = setInterval(
       () => void scheduler.trigger("reconciliation").catch(reportError),
       input.reconciliationMs ?? 6 * 60 * 60 * 1000

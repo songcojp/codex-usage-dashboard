@@ -70,9 +70,10 @@ staged_config=""
 
 write_config_json() {
   local target="$1" token="${2:-$device_token}"
-  node - "$target" "$server_url" "$token" "$device_name" "${tool_paths[@]}" <<'NODE'
+  node - "$target" "$server_url" "$device_name" "${tool_paths[@]}" 3<<<"$token" <<'NODE'
 const fs = require("node:fs");
-const [target, serverUrl, deviceToken, deviceName, ...specs] = process.argv.slice(2);
+const [target, serverUrl, deviceName, ...specs] = process.argv.slice(2);
+const deviceToken = fs.readFileSync(3, "utf8").replace(/\n$/, "");
 const toolPaths = {};
 for (const spec of specs) {
   const separator = spec.indexOf(":");
@@ -110,6 +111,7 @@ if [[ "$dry_run" -eq 1 ]]; then
 fi
 
 preflight_agent_install
+cutover_epoch="$(date +%s)"
 staged_config="$config_dir/.config.json.new"
 write_config_json "$staged_config"
 chmod 600 "$staged_config"

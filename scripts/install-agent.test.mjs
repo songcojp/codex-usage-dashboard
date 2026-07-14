@@ -130,12 +130,84 @@ test("rejects the removed interval option", shellTestOptions, () => {
 
 test("defines transactional preflight, backup, cutover, and rollback functions", shellTestOptions, async () => {
   const library = await readFile(path.join(repoRoot, "scripts", "lib", "install-agent.sh"), "utf8");
+  const installer = await readFile(scriptPath, "utf8");
   for (const name of ["preflight_agent_install", "backup_agent_install", "cutover_agent_service", "rollback_agent_install"]) {
     assert.match(library, new RegExp(`${name}\\(\\)`));
   }
   assert.match(library, /loginctl show-user/);
+  assert.match(library, /atomic_install_file/);
+  assert.match(library, /watcherStartedAt/);
   assert.match(library, /state\.unversioned\.json/);
   assert.match(library, /recovery-/);
+  assert.match(installer, /readFileSync\(3/);
+  assert.doesNotMatch(installer, /node - "\$target" "\$server_url" "\$device_name" "\$token"/);
+});
+
+test("Linux rollback restores old files and preserves failed-cutover delivery data", shellTestOptions, async () => {
+  const home = await tempHome();
+  const library = path.join(repoRoot, "scripts", "lib", "install-agent.sh");
+  const harness = String.raw`
+    set -euo pipefail
+    source "$LIBRARY"
+    systemctl() {
+      if [[ "$*" == *"is-active --quiet"* ]]; then return 1; fi
+      return 0
+    }
+    config_dir="$HOME/.config/codex-usage-dashboard-agent"
+    systemd_user_dir="$HOME/.config/systemd/user"
+    mkdir -p "$config_dir" "$systemd_user_dir"
+    config_file="$config_dir/config.json"
+    state_file="$config_dir/state.json"
+    queue_file="$config_dir/queue.jsonl"
+    dead_letter_file="$config_dir/dead-letter.jsonl"
+    service_file="$systemd_user_dir/codex-usage-dashboard-agent.service"
+    timer_file="$systemd_user_dir/codex-usage-dashboard-agent.timer"
+    watch_service_file="$systemd_user_dir/codex-usage-dashboard-agent-watch.service"
+    backup_dir="$config_dir/backup"
+    mkdir -p "$backup_dir"
+    staged_config="$config_dir/.config.json.new"
+    staged_service="$config_dir/.service.new"
+    old_units=(codex-usage-dashboard-agent.timer codex-usage-dashboard-agent.service codex-usage-dashboard-agent-watch.service)
+    cutover_epoch=1
+    printf old-config > "$config_file"
+    printf old-queue > "$queue_file"
+    printf old-service > "$service_file"
+    cp "$config_file" "$backup_dir/config.json"
+    cp "$queue_file" "$backup_dir/queue.jsonl"
+    cp "$service_file" "$backup_dir/codex-usage-dashboard-agent.service"
+    printf new-config > "$staged_config"
+    printf new-service > "$staged_service"
+    if cutover_agent_service; then exit 10; fi
+    printf new-undelivered > "$queue_file"
+    rollback_agent_install
+    [[ "$(cat "$config_file")" == old-config ]]
+    [[ "$(cat "$queue_file")" == old-queue ]]
+    [[ "$(cat "$service_file")" == old-service ]]
+    grep -Rqx new-undelivered "$backup_dir"/queue.jsonl.recovery-*
+  `;
+
+  try {
+    const result = spawnSync(shell.command, [...shell.prefixArgs, "-c", harness], {
+      cwd: repoRoot,
+      env: { ...process.env, HOME: home, LIBRARY: library },
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("Windows installer backs up, health-checks, removes old scan after health, and rolls back", async () => {
+  const source = await readFile(path.join(repoRoot, "scripts", "install-agent-windows.ps1"), "utf8");
+  assert.match(source, /Export-TaskIfPresent/);
+  assert.match(source, /Test-WatcherHealth/);
+  assert.match(source, /for \(\$Attempt = 0; \$Attempt -lt 30; \$Attempt\+\+\)/);
+  assert.match(source, /watcherStartedAt/);
+  assert.ok(source.indexOf("Test-WatcherHealth") < source.lastIndexOf("/Delete /TN $OldTask"));
+  assert.match(source, /Restore-PreviousTasks/);
+  assert.match(source, /\.recovery/);
+  assert.doesNotMatch(source, /--upload|scan --upload/);
 });
 
 test("rejects removed source slugs", shellTestOptions, () => {

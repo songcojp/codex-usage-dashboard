@@ -33,6 +33,7 @@ export type AgentStateV2 = {
   lastUploadAt: string | null;
   lastReconciliationAt: string | null;
   lastErrorCategory: string | null;
+  watcherStartedAt: string | null;
   queueDepth: number;
   files: Record<string, FileCursorState>;
   paths: Record<string, string>;
@@ -46,6 +47,7 @@ export function initialAgentState(): AgentStateV2 {
     lastUploadAt: null,
     lastReconciliationAt: null,
     lastErrorCategory: null,
+    watcherStartedAt: null,
     queueDepth: 0,
     files: {},
     paths: {},
