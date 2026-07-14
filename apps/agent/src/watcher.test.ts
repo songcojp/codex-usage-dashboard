@@ -106,6 +106,44 @@ describe("agent watcher", () => {
     expect((await readAgentState(statePath)).lastErrorCategory).not.toBe("upload-failed");
   });
 
+  it("continues draining a successful backlog without waiting for filesystem activity", async () => {
+    if (process.platform !== "linux" && process.platform !== "win32") return;
+    const dir = await tempDir();
+    const statePath = path.join(dir, "state.json");
+    await writeAgentState(initialAgentState(), statePath);
+    const queue = await DurableQueue.open({
+      queuePath: path.join(dir, "queue.jsonl"),
+      deadLetterPath: path.join(dir, "dead.jsonl")
+    });
+    await queue.enqueue(Array.from({ length: 1_500 }, (_, index) => queuedEvent(`backlog-${index}`)));
+    const controller = new AbortController();
+    let requests = 0;
+    const running = runWatcher({
+      config: { ...config(path.join(dir, "missing")), toolPaths: {} },
+      configDir: dir,
+      statePath,
+      queue,
+      signal: controller.signal,
+      fetchImpl: async (_url, init) => {
+        requests += 1;
+        const body = JSON.parse(String(init?.body)) as { events: unknown[] };
+        return new Response(JSON.stringify({
+          inserted: body.events.length,
+          duplicates: 0,
+          rejected: []
+        }), { status: 200 });
+      }
+    });
+
+    try {
+      await waitFor(() => queue.depth === 0, 1_000);
+      expect(requests).toBe(3);
+    } finally {
+      controller.abort();
+      await expect(running).rejects.toThrow(/watcher stopped/);
+    }
+  });
+
   it("coalesces duplicate pending reasons but preserves work arriving during a cycle", async () => {
     const reasons: string[] = [];
     let release!: () => void;
@@ -160,4 +198,12 @@ function queuedEvent(sourceEventId: string): UsageEventDraft {
     costUsd: null,
     metadata: {}
   };
+}
+
+async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error("timed out waiting for condition");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
 }

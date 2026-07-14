@@ -121,9 +121,13 @@ export async function runWatcher(input: {
       // Preserve the current retry deadline while source-only work continues.
     } else if (!result.errorCategory && result.uploadStatus !== null && result.uploadStatus >= 200 && result.uploadStatus < 300) {
       retry.reset();
-      nextRetryAt = null;
       if (retryTimer) clearTimeout(retryTimer);
       retryTimer = null;
+      if (input.queue.depth > 0) {
+        scheduleRetry(0);
+      } else {
+        nextRetryAt = null;
+      }
     } else {
       scheduleRetry(retry.nextDelay({ authenticationFailure: result.uploadStatus === 401 }));
     }
