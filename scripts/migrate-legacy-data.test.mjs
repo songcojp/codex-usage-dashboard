@@ -250,6 +250,24 @@ test("restarts both previously running servers when promotion fails", async () =
   }
 });
 
+test("operator guide covers dry-run, cutover, and rollback without private values", async () => {
+  const guide = await readFile(path.join(repoRoot, "docs", "legacy-data-migration.md"), "utf8");
+  for (const required of [
+    "scripts/migrate-legacy-data.sh --dry-run SOURCE_DIR TARGET_DIR BACKUP_DIR",
+    "scripts/migrate-legacy-data.sh SOURCE_DIR TARGET_DIR BACKUP_DIR",
+    "DEPLOY_ENABLED",
+    "LEGACY_CODEX_OTHER_SLUGS",
+    "docker compose",
+    "/api/health",
+    "rollback"
+  ]) {
+    assert.match(guide, new RegExp(escapeRegex(required), "i"));
+  }
+  assert.doesNotMatch(guide, /codex-private-legacy/);
+  assert.doesNotMatch(guide, /https?:\/\/[^\s/@:]+:[^\s/@]+@/);
+  assert.doesNotMatch(guide, /(?:\/(?:home|Users)\/[^/\s]+|[A-Za-z]:\\Users\\[^\\\s]+)/);
+});
+
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
