@@ -41,7 +41,7 @@ fi
 $ssh_transport "$remote_host" "mkdir -p $quoted_deploy_path"
 
 # rsync's host:path form is parsed by the remote shell, so escape the path portion.
-rsync -az -e "$ssh_transport" \
+rsync -az --delete-delay -e "$ssh_transport" \
   --exclude ".git/" \
   --exclude ".superpowers/" \
   --include ".env.example" \
