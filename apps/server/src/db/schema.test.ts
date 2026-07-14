@@ -1,11 +1,15 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { calculateMigrationChecksum, verifyAppliedMigrationChecksum } from "./migrate.js";
-import { modelPrices, projects, usageEvents } from "./schema.js";
+import { dailyUsageRollups, modelPrices, projects, usageEvents } from "./schema.js";
 
 const migrationsUrl = new URL("./migrations/", import.meta.url);
 const migrationFiles = readdirSync(migrationsUrl).filter((file) => file.endsWith(".sql")).sort();
 const migrationSql = readFileSync(new URL("./migrations/0001_initial.sql", import.meta.url), "utf8");
+const bigintMigrationUrl = new URL("./migrations/0002_bigint_usage_counters.sql", import.meta.url);
+const bigintMigrationSql = existsSync(bigintMigrationUrl)
+  ? readFileSync(bigintMigrationUrl, "utf8")
+  : "";
 
 describe("database schema", () => {
   it("maps event, project identity, and model-price columns", () => {
@@ -19,11 +23,45 @@ describe("database schema", () => {
     expect(modelPrices.toolId.notNull).toBe(false);
     expect(modelPrices.model.name).toBe("model");
   });
+
+  it("maps persisted token counters to PostgreSQL bigint", () => {
+    for (const column of [
+      usageEvents.inputTokens,
+      usageEvents.outputTokens,
+      usageEvents.cacheReadTokens,
+      usageEvents.cacheWriteTokens,
+      usageEvents.totalTokens,
+      dailyUsageRollups.inputTokens,
+      dailyUsageRollups.outputTokens,
+      dailyUsageRollups.cacheReadTokens,
+      dailyUsageRollups.cacheWriteTokens,
+      dailyUsageRollups.totalTokens
+    ]) {
+      expect(column.getSQLType()).toBe("bigint");
+    }
+  });
 });
 
 describe("public database baseline", () => {
-  it("ships exactly one initial migration", () => {
-    expect(migrationFiles).toEqual(["0001_initial.sql"]);
+  it("ships the initial schema and bigint counter migration", () => {
+    expect(migrationFiles).toEqual([
+      "0001_initial.sql",
+      "0002_bigint_usage_counters.sql"
+    ]);
+    for (const table of ["usage_events", "daily_usage_rollups"]) {
+      expect(bigintMigrationSql).toContain(`ALTER TABLE "${table}"`);
+      for (const column of [
+        "input_tokens",
+        "output_tokens",
+        "cache_read_tokens",
+        "cache_write_tokens",
+        "total_tokens"
+      ]) {
+        expect(bigintMigrationSql).toContain(
+          `ALTER COLUMN "${column}" TYPE bigint`
+        );
+      }
+    }
   });
 
   it("creates every business table and required index", () => {

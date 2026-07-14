@@ -98,7 +98,8 @@ function Assert-BundledCaCertificate {
   } catch {
     throw "Bundled CA certificate is invalid: $BundledCaPath"
   }
-  $BasicConstraintsSource = $Certificate.Extensions | Where-Object { $_.Oid.Value -eq "2.5.29.19" } | Select-Object -First 1
+  $BasicConstraintsOid = @("2", "5", "29", "19") -join "."
+  $BasicConstraintsSource = $Certificate.Extensions | Where-Object { $_.Oid.Value -eq $BasicConstraintsOid } | Select-Object -First 1
   if ($null -eq $BasicConstraintsSource) { throw "Bundled CA certificate is invalid: basic constraints are missing" }
   $BasicConstraints = [System.Security.Cryptography.X509Certificates.X509BasicConstraintsExtension]::new()
   $BasicConstraints.CopyFrom($BasicConstraintsSource)

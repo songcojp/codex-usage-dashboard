@@ -303,6 +303,7 @@ test("Windows installer backs up, health-checks, removes old scan after health, 
   assert.match(source, /X509Certificate2/);
   assert.match(source, /X509BasicConstraintsExtension/);
   assert.match(source, /CertificateAuthority/);
+  assert.doesNotMatch(source, /(?<![\d.])\d{1,3}(?:\.\d{1,3}){3}(?![\d.])/);
   assert.doesNotMatch(source, /\& \$NodePath -e \$ValidationScript/);
   assert.doesNotMatch(source, /\/d \/s \/c/);
   assert.doesNotMatch(source, /--upload|scan --upload/);

@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  bigint,
   date,
   integer,
   jsonb,
@@ -64,11 +65,11 @@ export const usageEvents = pgTable(
       .notNull(),
     sourceEventId: text("source_event_id").notNull(),
     model: text("model"),
-    inputTokens: integer("input_tokens").notNull().default(0),
-    outputTokens: integer("output_tokens").notNull().default(0),
-    cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
-    cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
-    totalTokens: integer("total_tokens").notNull(),
+    inputTokens: bigint("input_tokens", { mode: "number" }).notNull().default(0),
+    outputTokens: bigint("output_tokens", { mode: "number" }).notNull().default(0),
+    cacheReadTokens: bigint("cache_read_tokens", { mode: "number" }).notNull().default(0),
+    cacheWriteTokens: bigint("cache_write_tokens", { mode: "number" }).notNull().default(0),
+    totalTokens: bigint("total_tokens", { mode: "number" }).notNull(),
     costUsd: numeric("cost_usd"),
     rawMetaJson: jsonb("raw_meta_json").notNull().default({})
   },
@@ -96,11 +97,11 @@ export const dailyUsageRollups = pgTable(
       .notNull(),
     model: text("model").notNull().default("unknown"),
     eventCount: integer("event_count").notNull().default(0),
-    inputTokens: integer("input_tokens").notNull().default(0),
-    outputTokens: integer("output_tokens").notNull().default(0),
-    cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
-    cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
-    totalTokens: integer("total_tokens").notNull().default(0),
+    inputTokens: bigint("input_tokens", { mode: "number" }).notNull().default(0),
+    outputTokens: bigint("output_tokens", { mode: "number" }).notNull().default(0),
+    cacheReadTokens: bigint("cache_read_tokens", { mode: "number" }).notNull().default(0),
+    cacheWriteTokens: bigint("cache_write_tokens", { mode: "number" }).notNull().default(0),
+    totalTokens: bigint("total_tokens", { mode: "number" }).notNull().default(0),
     costUsd: numeric("cost_usd").notNull().default("0")
   },
   (table) => [
