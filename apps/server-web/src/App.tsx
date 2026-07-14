@@ -36,6 +36,8 @@ import {
 } from "./api.js";
 import { AppShell } from "./components/AppShell.js";
 import { FilterToolbar } from "./components/FilterToolbar.js";
+import { MetricsOverview } from "./components/MetricsOverview.js";
+import { TrendPanel } from "./components/TrendPanel.js";
 import type {
   DashboardSection,
   DashboardTab as Tab,
@@ -459,8 +461,6 @@ export function App() {
     }
     return "light";
   });
-  const [trendMode, setTrendMode] = useState<"daily" | "cumulative">("daily");
-  const [trendFilter, setTrendFilter] = useState<"all" | "cost" | "tokens">("all");
   const overviewRef = useRef<HTMLElement>(null);
   const trendRef = useRef<HTMLElement>(null);
   const explorerRef = useRef<HTMLElement>(null);
@@ -691,79 +691,18 @@ export function App() {
 
       {error ? <div className="error-banner">{error}</div> : null}
 
-      <section
-        className="metrics-grid"
-        aria-label="Token metrics"
-        id="dashboard-overview"
-        ref={overviewRef}
-        tabIndex={-1}
-      >
-        <MetricCard label={t("Total tokens")} value={data?.summary.totalTokens} loading={loading && !data} />
-        <MetricCard label={t("Cache read")} value={data?.summary.cacheReadTokens} loading={loading && !data} />
-        <MetricCard label={t("Input")} value={data?.summary.inputTokens} loading={loading && !data} />
-        <MetricCard label={t("Output")} value={data?.summary.outputTokens} loading={loading && !data} />
-        <MetricCard
-          label={t("Cost")}
-          value={data?.summary.costUsd}
-          loading={loading && !data}
-          formatter={formatMetricCurrency}
-        />
-      </section>
-
-      <section className="panel chart-panel" id="dashboard-trend" ref={trendRef} tabIndex={-1}>
-        <div className="chart-header-row">
-          <PanelHeader title={t("Usage trend")} meta={`${filters.from} to ${filters.to} (${filters.timeZone})`} />
-          <div className="chart-controls">
-            <div className="toggle-group" role="group" aria-label="Trend Mode">
-              <button
-                type="button"
-                className={trendMode === "daily" ? "toggle-btn active" : "toggle-btn"}
-                onClick={() => setTrendMode("daily")}
-              >
-                {t("Daily")}
-              </button>
-              <button
-                type="button"
-                className={trendMode === "cumulative" ? "toggle-btn active" : "toggle-btn"}
-                onClick={() => setTrendMode("cumulative")}
-              >
-                {t("Cumulative")}
-              </button>
-            </div>
-            <div className="toggle-group" role="group" aria-label="Trend Filter">
-              <button
-                type="button"
-                className={trendFilter === "all" ? "toggle-btn active" : "toggle-btn"}
-                onClick={() => setTrendFilter("all")}
-              >
-                {t("All")}
-              </button>
-              <button
-                type="button"
-                className={trendFilter === "tokens" ? "toggle-btn active" : "toggle-btn"}
-                onClick={() => setTrendFilter("tokens")}
-              >
-                {t("Tokens")}
-              </button>
-              <button
-                type="button"
-                className={trendFilter === "cost" ? "toggle-btn active" : "toggle-btn"}
-                onClick={() => setTrendFilter("cost")}
-              >
-                {t("Cost")}
-              </button>
-            </div>
-          </div>
-        </div>
-        <TrendChart
-          points={data?.trends.points ?? []}
-          loading={loading && !data}
-          language={language}
-          t={t}
-          theme={theme}
-          trendMode={trendMode}
-          trendFilter={trendFilter}
-        />
+      <section className="overview-grid" id="dashboard-overview" ref={overviewRef} tabIndex={-1}>
+        <MetricsOverview initialLoading={loading && !data} summary={data?.summary} t={t} />
+        <section id="dashboard-trend" ref={trendRef} tabIndex={-1}>
+          <TrendPanel
+            initialLoading={loading && !data}
+            language={language}
+            meta={`${filters.from} to ${filters.to} (${filters.timeZone})`}
+            points={data?.trends.points ?? []}
+            t={t}
+            theme={theme}
+          />
+        </section>
       </section>
 
       <section className="panel" id="dashboard-explorer" ref={explorerRef} tabIndex={-1}>
