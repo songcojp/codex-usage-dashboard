@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { emptyLineCursor, readLineChunk } from "./line-reader.js";
+import { observeFile } from "./file-identity.js";
 
 async function tempFile(): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-agent-lines-"));
@@ -10,6 +11,30 @@ async function tempFile(): Promise<string> {
 }
 
 describe("incremental line reader", () => {
+  it("rejects a replacement opened under an expected primary identity", async () => {
+    const filePath = await tempFile();
+    await fs.writeFile(filePath, "old\n");
+    const old = await observeFile(filePath);
+    await fs.unlink(filePath);
+    await fs.writeFile(filePath, "new\n");
+
+    if (old.identity?.startsWith("dev:")) {
+      await expect(readLineChunk({ filePath, cursor: emptyLineCursor(), expectedIdentity: old.identity }))
+        .rejects.toThrow(/source identity changed/);
+    }
+  });
+
+  it("frames a rotated final tail exactly once", async () => {
+    const filePath = await tempFile();
+    await fs.writeFile(filePath, "tail-without-newline");
+    const first = await readLineChunk({ filePath, cursor: emptyLineCursor() });
+    expect(first.lines).toEqual([]);
+    const final = await readLineChunk({ filePath, cursor: first.cursor, finalTail: true });
+    expect(final.lines).toMatchObject([{ text: "tail-without-newline", lineNumber: 1 }]);
+    expect(final.cursor).toMatchObject({ nextLineNumber: 2, pendingBase64: "" });
+    expect((await readLineChunk({ filePath, cursor: final.cursor, finalTail: true })).lines).toEqual([]);
+  });
+
   it("frames UTF-8 and trailing bytes without reading them twice", async () => {
     const filePath = await tempFile();
     await fs.writeFile(filePath, Buffer.from('one\n{"text":"你'));

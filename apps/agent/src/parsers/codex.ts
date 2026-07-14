@@ -58,7 +58,9 @@ export async function parseCodexLine(
   try {
     record = JSON.parse(trimmed) as CodexUsageRecord;
   } catch {
-    return { context: input.context };
+    return input.finalTail
+      ? { context: input.context, malformed: { category: "codex-final-tail-invalid", sourceHash: sha256Hex(input.line) } }
+      : { context: input.context };
   }
 
   try {

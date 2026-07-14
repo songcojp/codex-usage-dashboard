@@ -57,19 +57,26 @@ describe("source registry", () => {
     const replacement = file({ identity: "replacement", currentPath: originalPath, sourceIdentity: "new-path-hash" });
     const replaced = registerReplacement(stateWithFile(file()), "primary", replacement);
     expect(replaced.files.replacement).toMatchObject({ offset: 0, nextLineNumber: 1, sourceIdentity: "new-path-hash" });
-    expect(replaced.files.primary).toBeUndefined();
+    expect(replaced.files.primary).toMatchObject({ offset: 100, sourceIdentity: "old-path-hash" });
 
     const truncated = registerTruncation(stateWithFile(file()), "primary", observation({ size: 5 }));
     expect(truncated.files.primary).toMatchObject({ offset: 0, nextLineNumber: 1, pendingBase64: "", observedSize: 5 });
     expect(truncated.files.primary?.parser).toEqual({ kind: "codex-vscode" });
   });
 
-  it("retains lifetime tombstones for missing files and matches them before replay", () => {
-    const state = tombstoneMissingFiles(stateWithFile(file()), new Set());
-    expect(state.files.primary).toBeUndefined();
-    expect(state.tombstones.primary).toMatchObject({ identity: "primary", sourceIdentity: "old-path-hash", offset: 100 });
-    expect(matchObservation(state, observation({ identity: "primary", path: rotatedPath })))
+  it("requires two missing reconciliations before retaining a lifetime tombstone", () => {
+    const first = tombstoneMissingFiles(stateWithFile(file({ pendingBase64: "", offset: 500 })), new Set());
+    expect(first.files.primary).toMatchObject({ missingReconciliations: 1 });
+    const second = tombstoneMissingFiles(first, new Set());
+    expect(second.files.primary).toBeUndefined();
+    expect(second.tombstones.primary).toMatchObject({ identity: "primary", sourceIdentity: "old-path-hash", offset: 500 });
+    expect(matchObservation(second, observation({ identity: "primary", path: rotatedPath })))
       .toMatchObject({ kind: "tombstone", identity: "primary" });
+  });
+
+  it("never tombstones a missing source with unread or pending bytes", () => {
+    const pending = tombstoneMissingFiles(stateWithFile(file()), new Set());
+    expect(tombstoneMissingFiles(pending, new Set()).files.primary).toBeDefined();
   });
 });
 
@@ -92,6 +99,7 @@ function file(overrides: Partial<FileCursorState> = {}): FileCursorState {
     discardUntilNewline: false,
     observedSize: 500,
     observedMtimeMs: 1000,
+    missingReconciliations: 0,
     parser: { kind: "codex-vscode" },
     ...overrides
   };

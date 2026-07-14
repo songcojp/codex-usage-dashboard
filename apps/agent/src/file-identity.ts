@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import crypto from "node:crypto";
+import type { BigIntStats } from "node:fs";
 
 const maxIdentityLineBytes = 1024 * 1024;
 
@@ -32,7 +33,7 @@ export async function observeFile(filePath: string): Promise<FileObservation> {
   };
 }
 
-function primaryIdentity(stat: Awaited<ReturnType<typeof fs.stat>> & { dev: bigint; ino: bigint; birthtimeNs: bigint }): string | null {
+export function primaryIdentity(stat: BigIntStats): string | null {
   if (stat.dev <= 0n || stat.ino <= 0n || stat.birthtimeNs <= 0n) return null;
   return `dev:${stat.dev}:ino:${stat.ino}:birth:${stat.birthtimeNs}`;
 }

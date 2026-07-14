@@ -48,6 +48,8 @@ export function registerRename(
   file.currentPath = observation.path;
   file.observedSize = observation.size;
   file.observedMtimeMs = observation.mtimeMs;
+  file.missingReconciliations = 0;
+  file.finalizeAtEof = true;
   next.paths[observation.path] = identity;
   return next;
 }
@@ -59,8 +61,6 @@ export function registerReplacement(
 ): AgentStateV2 {
   const next = structuredClone(state);
   const previous = requiredFile(next, replacedIdentity);
-  next.tombstones[replacedIdentity] = toTombstone(previous);
-  delete next.files[replacedIdentity];
   delete next.paths[previous.currentPath];
   const reset = resetCursor(replacement, replacement.parser);
   next.files[reset.identity] = reset;
@@ -87,7 +87,13 @@ export function registerTruncation(
 export function tombstoneMissingFiles(state: AgentStateV2, observedIdentities: Set<string>): AgentStateV2 {
   const next = structuredClone(state);
   for (const [identity, file] of Object.entries(next.files)) {
-    if (observedIdentities.has(identity)) continue;
+    if (observedIdentities.has(identity)) {
+      file.missingReconciliations = 0;
+      continue;
+    }
+    file.missingReconciliations = (file.missingReconciliations ?? 0) + 1;
+    const fullyConsumed = file.offset >= file.observedSize && file.pendingBase64 === "" && !file.discardUntilNewline;
+    if (file.missingReconciliations < 2 || !fullyConsumed) continue;
     next.tombstones[identity] = toTombstone(file);
     delete next.files[identity];
     delete next.paths[file.currentPath];

@@ -237,7 +237,9 @@ export async function runWatcherCycle(input: {
   }
 
   let state = await readAgentState(input.statePath);
-  state = tombstoneMissingFiles(state, observedIdentities);
+  if (input.reason === "startup" || input.reason === "reconciliation") {
+    state = tombstoneMissingFiles(state, observedIdentities);
+  }
   if (input.reason === "startup" || input.reason === "reconciliation") {
     state.lastReconciliationAt = new Date().toISOString();
   }
@@ -273,6 +275,8 @@ function newCursor(
     discardUntilNewline: false,
     observedSize: observation.size,
     observedMtimeMs: observation.mtimeMs,
+    missingReconciliations: 0,
+    finalizeAtEof: false,
     parser: parserSlug === "codex-cli"
       ? { kind: "codex-jsonl", sessionId: null, cwd: null, model: null, toolSlug: "other" }
       : { kind: "codex-vscode" }

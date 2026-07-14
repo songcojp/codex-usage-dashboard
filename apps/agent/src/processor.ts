@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import os from "node:os";
 import { sha256Hex, type IngestBatch, type UsageEventDraft } from "@codex-usage-dashboard/shared";
 import type { AgentConfig } from "./config.js";
@@ -35,6 +34,7 @@ export async function processSourceFile(input: {
   maxReadBytes?: number;
   maxEvents?: number;
   now?: () => Date;
+  finalTail?: boolean;
 }): Promise<ProcessSourceResult> {
   const state = await readAgentState(input.statePath);
   const tracked = state.files[input.identity];
@@ -43,7 +43,9 @@ export async function processSourceFile(input: {
   const framed = await readLineChunk({
     filePath: input.filePath,
     cursor: toLineCursor(tracked),
-    maxBytes: input.maxReadBytes ?? defaultReadBytes
+    maxBytes: input.maxReadBytes ?? defaultReadBytes,
+    expectedIdentity: tracked.identity,
+    finalTail: input.finalTail ?? tracked.finalizeAtEof ?? false
   });
 
   let parserContext = restoreParserContext(tracked.parser, input.parserSlug);
@@ -62,7 +64,7 @@ export async function processSourceFile(input: {
           context: parserContext as CodexParserContext,
           sourceIdentity: tracked.sourceIdentity,
           filePath: input.filePath,
-          finalTail: false
+          finalTail: Boolean(frame.finalTail)
         })
       : await parseCodexVsCodeLine({
           line: frame.text,
@@ -70,7 +72,7 @@ export async function processSourceFile(input: {
           context: {},
           sourceIdentity: tracked.sourceIdentity,
           filePath: input.filePath,
-          finalTail: false
+          finalTail: Boolean(frame.finalTail)
         });
 
     const nextContext = input.parserSlug === "codex-cli" ? result.context : {};
@@ -101,13 +103,14 @@ export async function processSourceFile(input: {
 
   const queued = events.length > 0 ? await input.queue.enqueue(events) : 0;
   if (cursorAdvanced) {
-    const stat = await fs.stat(input.filePath);
     state.files[input.identity] = {
       ...tracked,
       ...acceptedCursor,
       parser: acceptedParser,
-      observedSize: stat.size,
-      observedMtimeMs: stat.mtimeMs
+      observedSize: framed.observedSize,
+      observedMtimeMs: framed.observedMtimeMs,
+      missingReconciliations: 0,
+      finalizeAtEof: (input.finalTail ?? tracked.finalizeAtEof ?? false) && acceptedCursor.pendingBase64 !== ""
     };
     state.lastSourceAdvanceAt = (input.now ?? (() => new Date()))().toISOString();
     state.lastErrorCategory = malformed > 0 ? "malformed-source-record" : null;
@@ -115,12 +118,11 @@ export async function processSourceFile(input: {
     await writeAgentState(state, input.statePath);
   }
 
-  const currentSize = (await fs.stat(input.filePath)).size;
   return {
     queued,
     malformed,
     advancedLines: acceptedCursor.nextLineNumber - startingLine,
-    remaining: Math.max(0, currentSize - acceptedCursor.offset)
+    remaining: Math.max(0, framed.observedSize - acceptedCursor.offset)
   };
 }
 

@@ -20,6 +20,8 @@ export type FileCursorState = {
   discardUntilNewline: boolean;
   observedSize: number;
   observedMtimeMs: number;
+  missingReconciliations?: number;
+  finalizeAtEof?: boolean;
   parser: ParserState;
 };
 
