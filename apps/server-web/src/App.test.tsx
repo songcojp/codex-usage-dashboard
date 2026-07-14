@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { App, createTrendChartOption, resolveLanguageSetting, toReportingDateInputValue } from "./App.js";
+import { App, resolveLanguageSetting, toReportingDateInputValue } from "./App.js";
+import { createTrendChartOption } from "./components/TrendPanel.js";
 
 const languageStorageKey = "codex-usage-dashboard-language";
 
@@ -109,10 +110,11 @@ describe("admin dashboard rendering", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
     await screen.findByRole("heading", { name: "Codex Usage Dashboard" });
-    expect(screen.queryAllByText("Codex Usage")).toHaveLength(0);
+    expect(screen.getByLabelText("Codex Usage Dashboard").textContent).toContain("Codex Usage");
     expect(screen.getByLabelText("Current UTC time").textContent).toMatch(
       /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC$/
     );
+    fireEvent.click(screen.getByRole("button", { name: "More filters" }));
     await screen.findByRole("option", { name: "Device A" });
     await screen.findByRole("option", { name: "claude-4" });
     const desktopOption = await screen.findByRole("option", { name: "Codex Desktop" });
@@ -145,7 +147,7 @@ describe("admin dashboard rendering", () => {
     expect(screen.getByText("84")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("tab", { name: "Prices" }));
-    expect(screen.getByText("Model prices")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Model prices" })).toBeTruthy();
     expect(screen.getByDisplayValue("gpt-5")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Input USD / 1M"), {
       target: { value: "3" }

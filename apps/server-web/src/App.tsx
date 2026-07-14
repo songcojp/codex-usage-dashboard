@@ -34,33 +34,23 @@ import {
   type UsageEvent,
   type UsageFilters
 } from "./api.js";
+import { AppShell } from "./components/AppShell.js";
+import { DataExplorer } from "./components/DataExplorer.js";
+import { FilterToolbar } from "./components/FilterToolbar.js";
+import { MetricsOverview } from "./components/MetricsOverview.js";
+import { TrendPanel } from "./components/TrendPanel.js";
+import type {
+  DashboardSection,
+  DashboardTab as Tab,
+  EventSort,
+  Language,
+  LanguageSetting,
+  PriceDraft,
+  ProjectSort,
+  Theme
+} from "./dashboard-types.js";
 
 type AuthState = "checking" | "authenticated" | "anonymous";
-type Tab = "events" | "devices" | "projects" | "prices";
-type Language = "zh" | "ja" | "en" | "ko";
-type LanguageSetting = "auto" | Language;
-type EventSort =
-  | "occurredAt-desc"
-  | "occurredAt-asc"
-  | "totalTokens-desc"
-  | "totalTokens-asc"
-  | "costUsd-desc"
-  | "costUsd-asc"
-  | "inputTokens-desc"
-  | "inputTokens-asc"
-  | "outputTokens-desc"
-  | "outputTokens-asc"
-  | "cacheTokens-desc"
-  | "cacheTokens-asc";
-type ProjectSort =
-  | "updatedAt-desc"
-  | "updatedAt-asc"
-  | "eventCount-desc"
-  | "eventCount-asc"
-  | "totalTokens-desc"
-  | "totalTokens-asc"
-  | "costUsd-desc"
-  | "costUsd-asc";
 
 const eventPageLimit = 25;
 const emptyPriceDraft: PriceDraft = {
@@ -112,6 +102,14 @@ const translations: Record<Language, Record<string, string>> = {
     English: "英语",
     Korean: "韩语",
     "Dashboard filters": "看板筛选",
+    "More filters": "更多筛选",
+    "Close filters": "收起筛选",
+    Filters: "筛选",
+    "Date range": "日期范围",
+    Dashboard: "仪表盘",
+    "Data explorer": "数据浏览器",
+    "Open navigation": "打开导航",
+    "Close navigation": "关闭导航",
     From: "开始日期",
     To: "结束日期",
     Tool: "工具",
@@ -220,6 +218,14 @@ const translations: Record<Language, Record<string, string>> = {
     English: "英語",
     Korean: "韓国語",
     "Dashboard filters": "ダッシュボードフィルター",
+    "More filters": "その他のフィルター",
+    "Close filters": "フィルターを閉じる",
+    Filters: "フィルター",
+    "Date range": "日付範囲",
+    Dashboard: "ダッシュボード",
+    "Data explorer": "データエクスプローラー",
+    "Open navigation": "ナビゲーションを開く",
+    "Close navigation": "ナビゲーションを閉じる",
     From: "開始日",
     To: "終了日",
     Tool: "ツール",
@@ -328,6 +334,14 @@ const translations: Record<Language, Record<string, string>> = {
     English: "영어",
     Korean: "한국어",
     "Dashboard filters": "대시보드 필터",
+    "More filters": "필터 더보기",
+    "Close filters": "필터 닫기",
+    Filters: "필터",
+    "Date range": "날짜 범위",
+    Dashboard: "대시보드",
+    "Data explorer": "데이터 탐색기",
+    "Open navigation": "탐색 열기",
+    "Close navigation": "탐색 닫기",
     From: "시작일",
     To: "종료일",
     Tool: "도구",
@@ -433,14 +447,16 @@ export function App() {
   const [filters, setFilters] = useState<UsageFilters>(() => defaultFilters());
   const [data, setData] = useState<DashboardData | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("events");
+  const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
   const [eventOffset, setEventOffset] = useState(0);
   const [eventSort, setEventSort] = useState<EventSort>("occurredAt-desc");
   const [projectSort, setProjectSort] = useState<ProjectSort>("updatedAt-desc");
   const [priceDraft, setPriceDraft] = useState<PriceDraft>(emptyPriceDraft);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [priceError, setPriceError] = useState<string | null>(null);
 
-  const [theme, setTheme] = useState<"light" | "dark">(() => {
+  const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window !== "undefined") {
       const stored = window.localStorage.getItem("codex-dashboard-theme");
       if (stored === "light" || stored === "dark") return stored;
@@ -450,8 +466,9 @@ export function App() {
     }
     return "light";
   });
-  const [trendMode, setTrendMode] = useState<"daily" | "cumulative">("daily");
-  const [trendFilter, setTrendFilter] = useState<"all" | "cost" | "tokens">("all");
+  const overviewRef = useRef<HTMLElement>(null);
+  const trendRef = useRef<HTMLElement>(null);
+  const explorerRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -473,6 +490,22 @@ export function App() {
     setLanguageSetting(nextSetting);
     writeStoredLanguageSetting(nextSetting);
   }, []);
+
+  const handleNavigate = useCallback((section: DashboardSection) => {
+    setActiveSection(section);
+    const target = {
+      overview: overviewRef.current,
+      trend: trendRef.current,
+      explorer: explorerRef.current
+    }[section];
+    target?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    target?.focus({ preventScroll: true });
+  }, []);
+
+  const handleOpenPrices = useCallback(() => {
+    setActiveTab("prices");
+    handleNavigate("explorer");
+  }, [handleNavigate]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setUtcNow(new Date()), 1000);
@@ -544,13 +577,13 @@ export function App() {
 
   const handleSavePrice = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setPriceError(null);
     try {
       await saveModelPrice(priceDraftToInput(priceDraft));
       await refresh();
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : t("Failed to save model price");
-      setError(message);
+      setPriceError(message);
     } finally {
       setLoading(false);
     }
@@ -559,14 +592,14 @@ export function App() {
   const handleDeletePrice = useCallback(
     async (id: string) => {
       setLoading(true);
-      setError(null);
+      setPriceError(null);
       try {
         await deleteModelPrice(id);
         setPriceDraft(emptyPriceDraft);
         await refresh();
       } catch (caught) {
         const message = caught instanceof Error ? caught.message : t("Failed to delete model price");
-        setError(message);
+        setPriceError(message);
       } finally {
         setLoading(false);
       }
@@ -635,228 +668,55 @@ export function App() {
   }
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="utc-clock" aria-label={t("Current UTC time")}>
-            {formatUtcClock(utcNow)}
-          </p>
-          <h1>{t("Codex Usage Dashboard")}</h1>
-        </div>
-        <div className="topbar-actions">
-          <LanguageSelect value={languageSetting} onChange={handleLanguageChange} t={t} />
-          <button
-            type="button"
-            className="theme-toggle-button"
-            onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
-            aria-label="Toggle Theme"
-          >
-            {theme === "light" ? (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-              </svg>
-            ) : (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="5"></circle>
-                <line x1="12" y1="1" x2="12" y2="3"></line>
-                <line x1="12" y1="21" x2="12" y2="23"></line>
-                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                <line x1="1" y1="12" x2="3" y2="12"></line>
-                <line x1="21" y1="12" x2="23" y2="12"></line>
-                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-              </svg>
-            )}
-          </button>
-          <span className="admin-chip">{adminEmail}</span>
-          <button type="button" className="secondary-button" onClick={handleLogout} disabled={loading}>
-            {t("Logout")}
-          </button>
-          <button type="button" className="primary-button" onClick={refresh} disabled={loading}>
-            {loading ? t("Refreshing...") : t("Refresh")}
-          </button>
-        </div>
-      </header>
-
-      <section className="filter-bar" aria-label={t("Dashboard filters")}>
-        <label>
-          {t("From")}
-          <input
-            type="date"
-            value={filters.from}
-            onChange={(event) => updateFilter(setFilters, setEventOffset, "from", event.target.value)}
-          />
-        </label>
-        <label>
-          {t("To")}
-          <input
-            type="date"
-            value={filters.to}
-            onChange={(event) => updateFilter(setFilters, setEventOffset, "to", event.target.value)}
-          />
-        </label>
-        <label>
-          {t("Tool")}
-          <select
-            value={filters.tool ?? ""}
-            onChange={(event) => updateFilter(setFilters, setEventOffset, "tool", event.target.value || undefined)}
-          >
-            <option value="">{t("All tools")}</option>
-            {data?.tools.rows.map((toolItem) => (
-              <option key={toolItem.id} value={toolItem.slug}>
-                {toolItem.displayName}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          {t("Device")}
-          <select
-            value={filters.deviceId ?? ""}
-            onChange={(event) =>
-              updateFilter(setFilters, setEventOffset, "deviceId", event.target.value || undefined)
-            }
-          >
-            <option value="">{t("All devices")}</option>
-            {(data?.deviceOptions.rows ?? data?.devices.rows ?? []).map((device) => (
-              <option key={device.id} value={device.id}>
-                {device.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          {t("Project")}
-          <select
-            value={filters.projectId ?? ""}
-            onChange={(event) =>
-              updateFilter(setFilters, setEventOffset, "projectId", event.target.value || undefined)
-            }
-          >
-            <option value="">{t("All projects")}</option>
-            {(data?.projectOptions.rows ?? data?.projects.rows ?? []).map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.displayName}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          {t("Time zone")}
-          <select
-            value={filters.timeZone}
-            onChange={(event) => updateFilter(setFilters, setEventOffset, "timeZone", event.target.value)}
-          >
-            {reportingTimeZoneOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          {t("Model")}
-          <select
-            value={filters.model ?? ""}
-            onChange={(event) => updateFilter(setFilters, setEventOffset, "model", event.target.value || undefined)}
-          >
-            <option value="">{t("All models")}</option>
-            {modelOptions.map((modelName) => (
-              <option key={modelName} value={modelName}>
-                {modelName}
-              </option>
-            ))}
-          </select>
-        </label>
-      </section>
+    <AppShell
+      activeSection={activeSection}
+      adminEmail={adminEmail}
+      currentTimeLabel={formatUtcClock(utcNow)}
+      languageSetting={languageSetting}
+      loading={loading}
+      onLanguageChange={handleLanguageChange}
+      onLogout={handleLogout}
+      onNavigate={handleNavigate}
+      onOpenPrices={handleOpenPrices}
+      onRefresh={refresh}
+      onThemeToggle={() => setTheme((current) => (current === "light" ? "dark" : "light"))}
+      t={t}
+      theme={theme}
+    >
+      <FilterToolbar
+        deviceOptions={data?.deviceOptions.rows ?? data?.devices.rows ?? []}
+        filters={filters}
+        modelOptions={modelOptions}
+        onChange={(key, value) => updateFilter(setFilters, setEventOffset, key, value)}
+        projectOptions={data?.projectOptions.rows ?? data?.projects.rows ?? []}
+        t={t}
+        timeZoneOptions={reportingTimeZoneOptions}
+        toolOptions={data?.tools.rows ?? []}
+      />
 
       {error ? <div className="error-banner">{error}</div> : null}
 
-      <section className="metrics-grid" aria-label="Token metrics">
-        <MetricCard label={t("Total tokens")} value={data?.summary.totalTokens} loading={loading && !data} />
-        <MetricCard label={t("Cache read")} value={data?.summary.cacheReadTokens} loading={loading && !data} />
-        <MetricCard label={t("Input")} value={data?.summary.inputTokens} loading={loading && !data} />
-        <MetricCard label={t("Output")} value={data?.summary.outputTokens} loading={loading && !data} />
-        <MetricCard
-          label={t("Cost")}
-          value={data?.summary.costUsd}
-          loading={loading && !data}
-          formatter={formatMetricCurrency}
-        />
+      <section className="overview-grid" id="dashboard-overview" ref={overviewRef} tabIndex={-1}>
+        <MetricsOverview initialLoading={loading && !data} summary={data?.summary} t={t} />
+        <section id="dashboard-trend" ref={trendRef} tabIndex={-1}>
+          <TrendPanel
+            initialLoading={loading && !data}
+            language={language}
+            meta={`${filters.from} to ${filters.to} (${filters.timeZone})`}
+            points={data?.trends.points ?? []}
+            t={t}
+            theme={theme}
+          />
+        </section>
       </section>
 
-      <section className="panel chart-panel">
-        <div className="chart-header-row">
-          <PanelHeader title={t("Usage trend")} meta={`${filters.from} to ${filters.to} (${filters.timeZone})`} />
-          <div className="chart-controls">
-            <div className="toggle-group" role="group" aria-label="Trend Mode">
-              <button
-                type="button"
-                className={trendMode === "daily" ? "toggle-btn active" : "toggle-btn"}
-                onClick={() => setTrendMode("daily")}
-              >
-                {t("Daily")}
-              </button>
-              <button
-                type="button"
-                className={trendMode === "cumulative" ? "toggle-btn active" : "toggle-btn"}
-                onClick={() => setTrendMode("cumulative")}
-              >
-                {t("Cumulative")}
-              </button>
-            </div>
-            <div className="toggle-group" role="group" aria-label="Trend Filter">
-              <button
-                type="button"
-                className={trendFilter === "all" ? "toggle-btn active" : "toggle-btn"}
-                onClick={() => setTrendFilter("all")}
-              >
-                {t("All")}
-              </button>
-              <button
-                type="button"
-                className={trendFilter === "tokens" ? "toggle-btn active" : "toggle-btn"}
-                onClick={() => setTrendFilter("tokens")}
-              >
-                {t("Tokens")}
-              </button>
-              <button
-                type="button"
-                className={trendFilter === "cost" ? "toggle-btn active" : "toggle-btn"}
-                onClick={() => setTrendFilter("cost")}
-              >
-                {t("Cost")}
-              </button>
-            </div>
-          </div>
-        </div>
-        <TrendChart
-          points={data?.trends.points ?? []}
-          loading={loading && !data}
-          language={language}
+      <section className="panel" id="dashboard-explorer" ref={explorerRef} tabIndex={-1}>
+        <DataExplorer
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
           t={t}
-          theme={theme}
-          trendMode={trendMode}
-          trendFilter={trendFilter}
-        />
-      </section>
-
-      <section className="panel">
-        <div className="tab-row" role="tablist" aria-label={t("Details")}>
-          <TabButton active={activeTab === "events"} onClick={() => setActiveTab("events")}>
-            {t("Events")}
-          </TabButton>
-          <TabButton active={activeTab === "devices"} onClick={() => setActiveTab("devices")}>
-            {t("Devices")}
-          </TabButton>
-          <TabButton active={activeTab === "projects"} onClick={() => setActiveTab("projects")}>
-            {t("Projects")}
-          </TabButton>
-          <TabButton active={activeTab === "prices"} onClick={() => setActiveTab("prices")}>
-            {t("Prices")}
-          </TabButton>
-        </div>
+          renderPanel={() => (
+            <>
         {activeTab === "events" ? (
           <EventsTable
             rows={data?.events.rows ?? []}
@@ -886,11 +746,15 @@ export function App() {
             onSave={handleSavePrice}
             onDelete={handleDeletePrice}
             onEdit={(price) => setPriceDraft(draftFromPrice(price))}
+            priceError={priceError}
             t={t}
           />
         ) : null}
+            </>
+          )}
+        />
       </section>
-    </main>
+    </AppShell>
   );
 }
 
@@ -1583,14 +1447,6 @@ function ProjectsTable({
   );
 }
 
-type PriceDraft = {
-  model: string;
-  inputCostPerMillionUsd: string;
-  outputCostPerMillionUsd: string;
-  cacheReadCostPerMillionUsd: string;
-  cacheWriteCostPerMillionUsd: string;
-};
-
 function PricesPanel({
   rows,
   draft,
@@ -1599,6 +1455,7 @@ function PricesPanel({
   onSave,
   onDelete,
   onEdit,
+  priceError,
   t
 }: {
   rows: ModelPrice[];
@@ -1608,18 +1465,21 @@ function PricesPanel({
   onSave: () => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onEdit: (price: ModelPrice) => void;
+  priceError: string | null;
   t: (key: string) => string;
 }) {
   return (
     <>
       <PanelHeader title={t("Model prices")} meta={`${formatNumber(rows.length)} ${t("configured")}`} />
       <form
+        aria-label={t("Model prices")}
         className="price-form"
         onSubmit={(event) => {
           event.preventDefault();
           void onSave();
         }}
       >
+        {priceError ? <div className="error-banner compact" role="alert">{priceError}</div> : null}
         <label>
           {t("Price model")}
           <input
