@@ -78,7 +78,7 @@ export function AppShell({
   return (
     <div className="command-center-shell">
       <button
-        aria-label={mobileNavigationOpen ? "Close navigation" : "Open navigation"}
+        aria-label={t(mobileNavigationOpen ? "Close navigation" : "Open navigation")}
         aria-expanded={mobileNavigationOpen}
         className="mobile-navigation-trigger"
         onClick={() => setMobileNavigationOpen((open) => !open)}

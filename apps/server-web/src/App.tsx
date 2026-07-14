@@ -35,6 +35,7 @@ import {
   type UsageFilters
 } from "./api.js";
 import { AppShell } from "./components/AppShell.js";
+import { FilterToolbar } from "./components/FilterToolbar.js";
 import type {
   DashboardSection,
   DashboardTab as Tab,
@@ -98,6 +99,13 @@ const translations: Record<Language, Record<string, string>> = {
     English: "英语",
     Korean: "韩语",
     "Dashboard filters": "看板筛选",
+    "More filters": "更多筛选",
+    "Close filters": "收起筛选",
+    "Date range": "日期范围",
+    Dashboard: "仪表盘",
+    "Data explorer": "数据浏览器",
+    "Open navigation": "打开导航",
+    "Close navigation": "关闭导航",
     From: "开始日期",
     To: "结束日期",
     Tool: "工具",
@@ -206,6 +214,13 @@ const translations: Record<Language, Record<string, string>> = {
     English: "英語",
     Korean: "韓国語",
     "Dashboard filters": "ダッシュボードフィルター",
+    "More filters": "その他のフィルター",
+    "Close filters": "フィルターを閉じる",
+    "Date range": "日付範囲",
+    Dashboard: "ダッシュボード",
+    "Data explorer": "データエクスプローラー",
+    "Open navigation": "ナビゲーションを開く",
+    "Close navigation": "ナビゲーションを閉じる",
     From: "開始日",
     To: "終了日",
     Tool: "ツール",
@@ -314,6 +329,13 @@ const translations: Record<Language, Record<string, string>> = {
     English: "영어",
     Korean: "한국어",
     "Dashboard filters": "대시보드 필터",
+    "More filters": "필터 더보기",
+    "Close filters": "필터 닫기",
+    "Date range": "날짜 범위",
+    Dashboard: "대시보드",
+    "Data explorer": "데이터 탐색기",
+    "Open navigation": "탐색 열기",
+    "Close navigation": "탐색 닫기",
     From: "시작일",
     To: "종료일",
     Tool: "도구",
@@ -656,97 +678,16 @@ export function App() {
       t={t}
       theme={theme}
     >
-      <section className="filter-bar" aria-label={t("Dashboard filters")}>
-        <label>
-          {t("From")}
-          <input
-            type="date"
-            value={filters.from}
-            onChange={(event) => updateFilter(setFilters, setEventOffset, "from", event.target.value)}
-          />
-        </label>
-        <label>
-          {t("To")}
-          <input
-            type="date"
-            value={filters.to}
-            onChange={(event) => updateFilter(setFilters, setEventOffset, "to", event.target.value)}
-          />
-        </label>
-        <label>
-          {t("Tool")}
-          <select
-            value={filters.tool ?? ""}
-            onChange={(event) => updateFilter(setFilters, setEventOffset, "tool", event.target.value || undefined)}
-          >
-            <option value="">{t("All tools")}</option>
-            {data?.tools.rows.map((toolItem) => (
-              <option key={toolItem.id} value={toolItem.slug}>
-                {toolItem.displayName}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          {t("Device")}
-          <select
-            value={filters.deviceId ?? ""}
-            onChange={(event) =>
-              updateFilter(setFilters, setEventOffset, "deviceId", event.target.value || undefined)
-            }
-          >
-            <option value="">{t("All devices")}</option>
-            {(data?.deviceOptions.rows ?? data?.devices.rows ?? []).map((device) => (
-              <option key={device.id} value={device.id}>
-                {device.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          {t("Project")}
-          <select
-            value={filters.projectId ?? ""}
-            onChange={(event) =>
-              updateFilter(setFilters, setEventOffset, "projectId", event.target.value || undefined)
-            }
-          >
-            <option value="">{t("All projects")}</option>
-            {(data?.projectOptions.rows ?? data?.projects.rows ?? []).map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.displayName}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          {t("Time zone")}
-          <select
-            value={filters.timeZone}
-            onChange={(event) => updateFilter(setFilters, setEventOffset, "timeZone", event.target.value)}
-          >
-            {reportingTimeZoneOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          {t("Model")}
-          <select
-            value={filters.model ?? ""}
-            onChange={(event) => updateFilter(setFilters, setEventOffset, "model", event.target.value || undefined)}
-          >
-            <option value="">{t("All models")}</option>
-            {modelOptions.map((modelName) => (
-              <option key={modelName} value={modelName}>
-                {modelName}
-              </option>
-            ))}
-          </select>
-        </label>
-      </section>
+      <FilterToolbar
+        deviceOptions={data?.deviceOptions.rows ?? data?.devices.rows ?? []}
+        filters={filters}
+        modelOptions={modelOptions}
+        onChange={(key, value) => updateFilter(setFilters, setEventOffset, key, value)}
+        projectOptions={data?.projectOptions.rows ?? data?.projects.rows ?? []}
+        t={t}
+        timeZoneOptions={reportingTimeZoneOptions}
+        toolOptions={data?.tools.rows ?? []}
+      />
 
       {error ? <div className="error-banner">{error}</div> : null}
 

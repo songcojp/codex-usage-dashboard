@@ -113,6 +113,7 @@ describe("admin dashboard rendering", () => {
     expect(screen.getByLabelText("Current UTC time").textContent).toMatch(
       /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC$/
     );
+    fireEvent.click(screen.getByRole("button", { name: "More filters" }));
     await screen.findByRole("option", { name: "Device A" });
     await screen.findByRole("option", { name: "claude-4" });
     const desktopOption = await screen.findByRole("option", { name: "Codex Desktop" });
