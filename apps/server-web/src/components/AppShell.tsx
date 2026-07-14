@@ -76,7 +76,7 @@ export function AppShell({
   }, [onOpenPrices]);
 
   return (
-    <div className="command-center-shell">
+    <div className="dashboard-shell command-center-shell">
       <button
         aria-label={t(mobileNavigationOpen ? "Close navigation" : "Open navigation")}
         aria-expanded={mobileNavigationOpen}
@@ -115,7 +115,7 @@ export function AppShell({
         </nav>
       </aside>
 
-      <main className="app-shell command-center-main">
+      <main className="app-shell dashboard-main command-center-main">
         <header className="topbar command-center-header">
           <div className="command-center-title">
             <h1>{t("Codex Usage Dashboard")}</h1>
