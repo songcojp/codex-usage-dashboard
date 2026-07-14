@@ -204,8 +204,7 @@ const translations: Record<Language, Record<string, string>> = {
     "Daily": "单日用量",
     "Cumulative": "累计用量",
     "All": "全部显示",
-    "Tokens": "仅显 Token",
-    "Cost": "仅显成本"
+    "Tokens": "仅显 Token"
   },
   ja: {
     "Checking admin session...": "管理者セッションを確認しています...",
@@ -313,8 +312,7 @@ const translations: Record<Language, Record<string, string>> = {
     "Daily": "日次",
     "Cumulative": "累加",
     "All": "すべて",
-    "Tokens": "トークン",
-    "Cost": "コスト"
+    "Tokens": "トークン"
   },
   ko: {
     "Checking admin session...": "관리자 세션을 확인하는 중...",
@@ -422,8 +420,7 @@ const translations: Record<Language, Record<string, string>> = {
     "Daily": "일별",
     "Cumulative": "누적",
     "All": "전체",
-    "Tokens": "토큰",
-    "Cost": "비용"
+    "Tokens": "토큰"
   }
 };
 use([GridComponent, LegendComponent, LineChart, TooltipComponent, CanvasRenderer]);
