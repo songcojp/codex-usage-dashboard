@@ -35,7 +35,7 @@ describe("acknowledgement validation", () => {
     const result = validateAcknowledgement([event("a")], {
       inserted: 0,
       duplicates: 0,
-      rejected: [{ sourceEventId: "a", reason: "/home/person/private/token" }]
+      rejected: [{ sourceEventId: "a", reason: "private/token" }]
     });
     expect(result.rejected[0]?.reason).toBe("server-rejected");
   });
