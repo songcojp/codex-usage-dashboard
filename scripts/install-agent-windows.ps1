@@ -33,7 +33,9 @@ function Write-AtomicUtf8File([string]$Path, [string]$Content) {
     $Stream.Flush($true)
   } finally { $Stream.Dispose() }
   if ([IO.File]::Exists($Path)) {
-    [IO.File]::Replace($Temp, $Path, $null)
+    $ReplaceBackup = "$Path.replace-backup-$PID-$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+    [IO.File]::Replace($Temp, $Path, $ReplaceBackup)
+    Remove-Item $ReplaceBackup -Force
   } else {
     [IO.File]::Move($Temp, $Path)
   }
