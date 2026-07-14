@@ -14,7 +14,6 @@ function config(sourcePath: string): AgentConfig {
     serverUrl: "https://example.test",
     deviceToken: "device-token",
     deviceName: "workstation",
-    scanInterval: "hourly",
     toolPaths: {
       "codex-cli": [sourcePath]
     }

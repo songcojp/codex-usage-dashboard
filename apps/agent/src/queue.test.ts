@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { UsageEventDraft } from "@codex-usage-dashboard/shared";
 import { describe, expect, it } from "vitest";
-import { DurableQueue, appendQueue, readQueue } from "./queue.js";
+import { DurableQueue } from "./queue.js";
 
 function draft(sourceEventId: string): UsageEventDraft {
   return {
@@ -82,27 +82,6 @@ describe("queue", () => {
 
     expect((await fs.stat(paths.queuePath)).mode & 0o777).toBe(0o600);
     expect((await fs.stat(path.dirname(paths.queuePath))).mode & 0o777).toBe(0o700);
-  });
-  it("returns an empty array for a missing queue file", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-usage-dashboard-queue-"));
-    const queuePath = path.join(dir, "missing", "queue.jsonl");
-
-    await expect(readQueue(queuePath)).resolves.toEqual([]);
-  });
-
-  it("appends drafts as JSONL and reads them back", async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-usage-dashboard-queue-"));
-    const queuePath = path.join(dir, "nested", "queue.jsonl");
-    const first = draft("source-event-1");
-    const second = draft("source-event-2");
-
-    await appendQueue(queuePath, [first]);
-    await appendQueue(queuePath, [second]);
-
-    await expect(readQueue(queuePath)).resolves.toEqual([first, second]);
-    await expect(fs.readFile(queuePath, "utf8")).resolves.toBe(
-      `${JSON.stringify(first)}\n${JSON.stringify(second)}\n`
-    );
   });
 });
 

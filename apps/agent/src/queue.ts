@@ -42,7 +42,7 @@ export class DurableQueue {
     await ensurePrivateDirectory(path.dirname(options.deadLetterPath));
     await chmodIfExists(options.queuePath, 0o600);
     await chmodIfExists(options.deadLetterPath, 0o600);
-    const events = await readQueue(options.queuePath);
+    const events = await readQueueFile(options.queuePath);
     const deadLetterIds = await readDeadLetterIds(options.deadLetterPath);
     const sizeBytes = await fileSize(options.queuePath);
     if (sizeBytes > (options.maxBytes ?? defaultMaxBytes)) {
@@ -117,18 +117,7 @@ export class DurableQueue {
   }
 }
 
-export async function appendQueue(queuePath: string, events: UsageEventDraft[]): Promise<void> {
-  await fs.mkdir(path.dirname(queuePath), { recursive: true });
-
-  if (events.length === 0) {
-    return;
-  }
-
-  const lines = events.map((event) => JSON.stringify(event)).join("\n");
-  await fs.appendFile(queuePath, `${lines}\n`, "utf8");
-}
-
-export async function readQueue(queuePath: string): Promise<UsageEventDraft[]> {
+async function readQueueFile(queuePath: string): Promise<UsageEventDraft[]> {
   try {
     const content = await fs.readFile(queuePath, "utf8");
     return content
@@ -139,18 +128,6 @@ export async function readQueue(queuePath: string): Promise<UsageEventDraft[]> {
   } catch (error) {
     if (isNodeError(error) && error.code === "ENOENT") {
       return [];
-    }
-
-    throw error;
-  }
-}
-
-export async function clearQueue(queuePath: string): Promise<void> {
-  try {
-    await fs.unlink(queuePath);
-  } catch (error) {
-    if (isNodeError(error) && error.code === "ENOENT") {
-      return;
     }
 
     throw error;

@@ -3,7 +3,6 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import type { AgentConfig } from "./config.js";
 import { sha256Hex } from "@codex-usage-dashboard/shared";
-import { scanConfiguredSources, uploadQueuedEvents, type ScanResult, type UploadQueueResult } from "./runtime.js";
 import { observeFile } from "./file-identity.js";
 import { parserAdapters } from "./parsers/index.js";
 import { acquireProcessLock } from "./process-lock.js";
@@ -12,10 +11,6 @@ import { DurableQueue } from "./queue.js";
 import { RetryBackoff } from "./retry.js";
 import { matchObservation, registerRename, registerReplacement, registerTruncation, tombstoneMissingFiles } from "./source-registry.js";
 import { readAgentState, writeAgentState, type FileCursorState } from "./state.js";
-
-export type WatchRunResult = ScanResult & {
-  upload?: UploadQueueResult;
-};
 
 export type WatcherCycleReason = "startup" | "filesystem" | "reconciliation" | "retry";
 
@@ -292,71 +287,6 @@ function errorCategory(error: unknown): string {
   return error && typeof error === "object" && "code" in error && typeof error.code === "string"
     ? `io-${error.code.toLowerCase()}`
     : "watcher-cycle-failed";
-}
-
-export async function watchConfiguredSources(input: {
-  config: AgentConfig;
-  queuePath: string;
-  statePath: string;
-  upload: boolean;
-  debounceMs?: number;
-  onRun?: (result: WatchRunResult) => void;
-  onError?: (error: unknown) => void;
-}): Promise<never> {
-  let running = false;
-  let pending = false;
-  let timer: NodeJS.Timeout | null = null;
-
-  const run = async () => {
-    if (running) {
-      pending = true;
-      return;
-    }
-
-    running = true;
-    try {
-      do {
-        pending = false;
-        const scan = await scanConfiguredSources({
-          config: input.config,
-          queuePath: input.queuePath,
-          statePath: input.statePath
-        });
-        const result: WatchRunResult = input.upload
-          ? { ...scan, upload: await uploadQueuedEvents({ config: input.config, queuePath: input.queuePath }) }
-          : scan;
-        input.onRun?.(result);
-      } while (pending);
-    } catch (error) {
-      input.onError?.(error);
-    } finally {
-      running = false;
-    }
-  };
-
-  const schedule = () => {
-    if (timer) {
-      clearTimeout(timer);
-    }
-    timer = setTimeout(() => void run(), input.debounceMs ?? 2000);
-  };
-
-  await run();
-
-  const watchers: fs.FSWatcher[] = [];
-  for (const root of await resolveExistingWatchRoots(input.config)) {
-    watchers.push(
-      fs.watch(root, { recursive: process.platform === "win32" || process.platform === "darwin" }, () => {
-        schedule();
-      })
-    );
-  }
-
-  if (watchers.length === 0) {
-    throw new Error("no existing configured source paths to watch");
-  }
-
-  return new Promise<never>(() => undefined);
 }
 
 export async function resolveExistingWatchRoots(config: AgentConfig): Promise<string[]> {
