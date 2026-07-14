@@ -273,20 +273,47 @@ test("Windows installer backs up, health-checks, removes old scan after health, 
   assert.match(source, /Test-WatcherHealth/);
   assert.match(source, /for \(\$Attempt = 0; \$Attempt -lt 30; \$Attempt\+\+\)/);
   assert.match(source, /watcherStartedAt/);
-  assert.match(source, /encoding="UTF-8"/);
+  assert.match(source, /encoding="UTF-16"/);
+  assert.match(source, /WindowsIdentity.*GetCurrent\(\)\.Name/);
+  assert.match(source, /WindowsIdentity.*GetCurrent\(\)\.User\.Value/);
+  assert.match(source, /<LogonTrigger><UserId>\$EscapedUserName<\/UserId>/);
+  assert.match(source, /<Principal id="Author"><UserId>\$EscapedUserSid<\/UserId>/);
+  assert.match(source, /<Interval>PT1M<\/Interval>/);
+  assert.match(source, /Get-ScheduledTask -TaskName \$TaskName/);
+  assert.match(source, /\.State -ne "Running"/);
+  assert.match(source, /\.State -ne "Running"\) \{ Start-Sleep -Seconds 1; continue \}/);
   assert.match(source, /\[IO\.File\]::Replace\(\$Temp, \$Path, \$ReplaceBackup\)/);
   assert.doesNotMatch(source, /\[IO\.File\]::Replace\(\$Temp, \$Path, \$null\)/);
   assert.doesNotMatch(source, /\[IO\.File\]::Move\(\$Temp, \$Path, \$true\)/);
   assert.match(source, /\$ValidateOnly/);
-  assert.ok(source.indexOf("Test-WatcherHealth") < source.lastIndexOf("/Delete /TN $OldTask"));
+  assert.ok(source.indexOf("Test-WatcherHealth") < source.lastIndexOf('$OldTask, "/F"'));
   assert.match(source, /Restore-PreviousTasks/);
   assert.match(source, /\.recovery/);
   assert.match(source, /BundledCaPath/);
   assert.match(source, /server-ca\.crt/);
   assert.match(source, /agent-watch\.cjs/);
+  assert.match(source, /agent-watch\.vbs/);
+  assert.match(source, /function New-HiddenLauncherContent/);
+  assert.match(source, /wscript\.exe/);
+  assert.match(source, /\.Run\(Command, 0, True\)/);
+  assert.match(source, /<Command>\$EscapedWscript<\/Command>/);
+  assert.match(source, /<Arguments>\/\/B &quot;\$EscapedHiddenLauncher&quot;<\/Arguments>/);
   assert.match(source, /NODE_EXTRA_CA_CERTS/);
+  assert.match(source, /IsNullOrWhiteSpace\(\$PathValue\)/);
+  assert.match(source, /X509Certificate2/);
+  assert.match(source, /X509BasicConstraintsExtension/);
+  assert.match(source, /CertificateAuthority/);
+  assert.doesNotMatch(source, /\& \$NodePath -e \$ValidationScript/);
   assert.doesNotMatch(source, /\/d \/s \/c/);
   assert.doesNotMatch(source, /--upload|scan --upload/);
+});
+
+test("Windows installer treats missing scheduled tasks as an expected condition", async () => {
+  const source = await readFile(path.join(repoRoot, "scripts", "install-agent-windows.ps1"), "utf8");
+  assert.match(source, /function Invoke-SchtasksAllowFailure/);
+  assert.match(source, /Invoke-SchtasksAllowFailure @\("\/Query", "\/TN", \$Name, "\/XML"\)/);
+  assert.match(source, /Invoke-SchtasksAllowFailure @\("\/Delete", "\/TN", \$TaskName, "\/F"\)/);
+  assert.match(source, /Invoke-SchtasksAllowFailure @\("\/Delete", "\/TN", \$OldTask, "\/F"\)/);
 });
 
 test("rejects removed source slugs", shellTestOptions, () => {
