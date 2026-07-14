@@ -90,10 +90,10 @@ jobs:
           : "${DEPLOY_PATH:?DEPLOY_PATH secret is required}"
           : "${DEPLOY_USER:?DEPLOY_USER secret is required}"
 
-          case "$DEPLOY_PATH" in
-            /opt/*|/srv/*) ;;
+          case "${DEPLOY_PATH%/}" in
+            /opt/codex-usage-dashboard|/srv/codex-usage-dashboard) ;;
             *)
-              echo "DEPLOY_PATH must be under /opt or /srv." >&2
+              echo "DEPLOY_PATH must be the dedicated Codex Usage Dashboard path." >&2
               exit 1
               ;;
           esac

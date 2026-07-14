@@ -11,7 +11,8 @@
   ],
   "scripts": {
     "build": "npm --workspace @codex-usage-dashboard/shared run build && npm --workspace @codex-usage-dashboard/agent run build && npm --workspace @codex-usage-dashboard/server run build && npm --workspace @codex-usage-dashboard/server-web run build",
-    "test": "npm --workspace @codex-usage-dashboard/shared run test && npm --workspace @codex-usage-dashboard/agent run test && npm --workspace @codex-usage-dashboard/server run test && npm --workspace @codex-usage-dashboard/server-web run test",
+    "test:scripts": "node --test scripts/*.test.mjs",
+    "test": "npm run test:scripts && npm --workspace @codex-usage-dashboard/shared run test && npm --workspace @codex-usage-dashboard/agent run test && npm --workspace @codex-usage-dashboard/server run test && npm --workspace @codex-usage-dashboard/server-web run test",
     "typecheck": "npm --workspace @codex-usage-dashboard/shared run typecheck && npm --workspace @codex-usage-dashboard/agent run typecheck && npm --workspace @codex-usage-dashboard/server run typecheck && npm --workspace @codex-usage-dashboard/server-web run typecheck",
     "dev:server": "npm --workspace @codex-usage-dashboard/server run dev",
     "dev:web": "npm --workspace @codex-usage-dashboard/server-web run dev",
