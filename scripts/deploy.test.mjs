@@ -60,3 +60,10 @@ test("compose can select the private-IP Caddy configuration", async () => {
   assert.match(privateCaddyfile, /tls internal/);
   assert.doesNotMatch(privateCaddyfile, /\b(?:\d{1,3}\.){3}\d{1,3}\b/);
 });
+
+test("deployment removes stale tracked files without deleting protected environment files", async () => {
+  const source = await readFile(deployScript, "utf8");
+  assert.match(source, /rsync -az --delete-delay/);
+  assert.match(source, /--exclude "\.env"/);
+  assert.doesNotMatch(source, /--delete-excluded/);
+});
