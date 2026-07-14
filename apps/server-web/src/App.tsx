@@ -35,6 +35,7 @@ import {
   type UsageFilters
 } from "./api.js";
 import { AppShell } from "./components/AppShell.js";
+import { DataExplorer } from "./components/DataExplorer.js";
 import { FilterToolbar } from "./components/FilterToolbar.js";
 import { MetricsOverview } from "./components/MetricsOverview.js";
 import { TrendPanel } from "./components/TrendPanel.js";
@@ -450,6 +451,7 @@ export function App() {
   const [priceDraft, setPriceDraft] = useState<PriceDraft>(emptyPriceDraft);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [priceError, setPriceError] = useState<string | null>(null);
 
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window !== "undefined") {
@@ -572,13 +574,13 @@ export function App() {
 
   const handleSavePrice = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setPriceError(null);
     try {
       await saveModelPrice(priceDraftToInput(priceDraft));
       await refresh();
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : t("Failed to save model price");
-      setError(message);
+      setPriceError(message);
     } finally {
       setLoading(false);
     }
@@ -587,14 +589,14 @@ export function App() {
   const handleDeletePrice = useCallback(
     async (id: string) => {
       setLoading(true);
-      setError(null);
+      setPriceError(null);
       try {
         await deleteModelPrice(id);
         setPriceDraft(emptyPriceDraft);
         await refresh();
       } catch (caught) {
         const message = caught instanceof Error ? caught.message : t("Failed to delete model price");
-        setError(message);
+        setPriceError(message);
       } finally {
         setLoading(false);
       }
@@ -706,20 +708,12 @@ export function App() {
       </section>
 
       <section className="panel" id="dashboard-explorer" ref={explorerRef} tabIndex={-1}>
-        <div className="tab-row" role="tablist" aria-label={t("Details")}>
-          <TabButton active={activeTab === "events"} onClick={() => setActiveTab("events")}>
-            {t("Events")}
-          </TabButton>
-          <TabButton active={activeTab === "devices"} onClick={() => setActiveTab("devices")}>
-            {t("Devices")}
-          </TabButton>
-          <TabButton active={activeTab === "projects"} onClick={() => setActiveTab("projects")}>
-            {t("Projects")}
-          </TabButton>
-          <TabButton active={activeTab === "prices"} onClick={() => setActiveTab("prices")}>
-            {t("Prices")}
-          </TabButton>
-        </div>
+        <DataExplorer
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          t={t}
+          renderPanel={() => (
+            <>
         {activeTab === "events" ? (
           <EventsTable
             rows={data?.events.rows ?? []}
@@ -749,9 +743,13 @@ export function App() {
             onSave={handleSavePrice}
             onDelete={handleDeletePrice}
             onEdit={(price) => setPriceDraft(draftFromPrice(price))}
+            priceError={priceError}
             t={t}
           />
         ) : null}
+            </>
+          )}
+        />
       </section>
     </AppShell>
   );
@@ -1454,6 +1452,7 @@ function PricesPanel({
   onSave,
   onDelete,
   onEdit,
+  priceError,
   t
 }: {
   rows: ModelPrice[];
@@ -1463,18 +1462,21 @@ function PricesPanel({
   onSave: () => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onEdit: (price: ModelPrice) => void;
+  priceError: string | null;
   t: (key: string) => string;
 }) {
   return (
     <>
       <PanelHeader title={t("Model prices")} meta={`${formatNumber(rows.length)} ${t("configured")}`} />
       <form
+        aria-label={t("Model prices")}
         className="price-form"
         onSubmit={(event) => {
           event.preventDefault();
           void onSave();
         }}
       >
+        {priceError ? <div className="error-banner compact" role="alert">{priceError}</div> : null}
         <label>
           {t("Price model")}
           <input
