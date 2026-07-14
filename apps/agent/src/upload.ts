@@ -1,9 +1,11 @@
 import type { IngestBatch } from "@codex-usage-dashboard/shared";
+import { validateAcknowledgement, type ValidatedAcknowledgement } from "./acknowledgement.js";
 
 export type UploadResult = {
   ok: boolean;
   status: number;
   body: unknown;
+  acknowledgement?: ValidatedAcknowledgement;
 };
 
 export async function uploadIngestBatch(input: {
@@ -25,11 +27,13 @@ export async function uploadIngestBatch(input: {
   const text = await response.text();
   const body = parseResponseBody(text);
 
-  return {
+  const result: UploadResult = {
     ok: response.ok,
     status: response.status,
     body
   };
+  if (response.ok) result.acknowledgement = validateAcknowledgement(input.batch.events, body);
+  return result;
 }
 
 function parseResponseBody(text: string): unknown {
