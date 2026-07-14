@@ -1,19 +1,23 @@
-import { parseCodexVsCodeFile } from "./codex-vscode.js";
-import { parseCodexFile } from "./codex.js";
-import type { ParserAdapter } from "./types.js";
+import { parseCodexVsCodeFile, parseCodexVsCodeLine, type CodexVsCodeParserContext } from "./codex-vscode.js";
+import { initialCodexContext, parseCodexFile, parseCodexLine, type CodexParserContext } from "./codex.js";
+import type { IncrementalParserAdapter } from "./types.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-export { parseCodexVsCodeFile } from "./codex-vscode.js";
-export { parseCodexFile } from "./codex.js";
-export type { ParserAdapter } from "./types.js";
+export { parseCodexVsCodeFile, parseCodexVsCodeLine } from "./codex-vscode.js";
+export { initialCodexContext, parseCodexFile, parseCodexLine } from "./codex.js";
+export type { IncrementalParserAdapter, ParseLineInput, ParseLineResult, ParserAdapter } from "./types.js";
 
-export const parserAdapters: ParserAdapter[] = [
-  { slug: "codex-cli", parseFile: parseCodexFile, discoverFiles: discoverCodexSessionFiles },
+export const parserAdapters: Array<
+  IncrementalParserAdapter<CodexParserContext> | IncrementalParserAdapter<CodexVsCodeParserContext>
+> = [
+  { slug: "codex-cli", parseFile: parseCodexFile, discoverFiles: discoverCodexSessionFiles, initialContext: initialCodexContext, parseLine: parseCodexLine },
   {
     slug: "codex-vscode-plugin",
     parseFile: parseCodexVsCodeFile,
-    discoverFiles: discoverCodexVsCodeFiles
+    discoverFiles: discoverCodexVsCodeFiles,
+    initialContext: () => ({}),
+    parseLine: parseCodexVsCodeLine
   }
 ];
 

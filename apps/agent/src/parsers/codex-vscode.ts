@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import { sha256Hex, usageEventDraftSchema, type UsageEventDraft } from "@codex-usage-dashboard/shared";
 import { identityFromPathParts } from "../project.js";
 import { normalizeTimestampUtc } from "./timestamp.js";
+import type { ParseLineInput, ParseLineResult } from "./types.js";
 
 const ignoredEphemeralFeatures = new Set(["thread_title"]);
 
@@ -10,15 +11,33 @@ export async function parseCodexVsCodeFile(filePath: string): Promise<UsageEvent
   const events: UsageEventDraft[] = [];
 
   for (const [index, line] of contents.split(/\r?\n/).entries()) {
-    const trimmed = line.trim();
-    if (!trimmed.includes("ephemeral_generation_token_usage") || shouldIgnoreTokenUsageLine(trimmed)) {
-      continue;
-    }
-
-    events.push(parseTokenUsageLine(filePath, trimmed, index + 1));
+    const result = await parseCodexVsCodeLine({
+      line, lineNumber: index + 1, context: {}, sourceIdentity: sha256Hex(`path:${filePath}`), filePath, finalTail: false
+    });
+    if (result.malformed) throw new Error(`Codex VS Code record ${index + 1} invalid`);
+    if (result.event) events.push(result.event);
   }
 
   return events;
+}
+
+export type CodexVsCodeParserContext = Record<string, never>;
+
+export async function parseCodexVsCodeLine(
+  input: ParseLineInput<CodexVsCodeParserContext>
+): Promise<ParseLineResult<CodexVsCodeParserContext>> {
+  const trimmed = input.line.trim();
+  if (!trimmed.includes("ephemeral_generation_token_usage") || shouldIgnoreTokenUsageLine(trimmed)) {
+    return { context: input.context };
+  }
+  try {
+    return { context: input.context, event: parseTokenUsageLine(input.sourceIdentity, trimmed, input.lineNumber) };
+  } catch {
+    return {
+      context: input.context,
+      malformed: { category: "codex-vscode-token-record-invalid", sourceHash: sha256Hex(input.line) }
+    };
+  }
 }
 
 function shouldIgnoreTokenUsageLine(line: string): boolean {
@@ -26,14 +45,13 @@ function shouldIgnoreTokenUsageLine(line: string): boolean {
   return fields.event === "ephemeral_generation_token_usage" && ignoredEphemeralFeatures.has(fields.feature ?? "");
 }
 
-function parseTokenUsageLine(filePath: string, line: string, recordNumber: number): UsageEventDraft {
+function parseTokenUsageLine(sourceFileHash: string, line: string, recordNumber: number): UsageEventDraft {
   const occurredAt = parseTimestamp(line, recordNumber);
   const fields = keyValueFields(line.split(/\s+/));
   const rawInputTokens = tokenCount(fields.inputTokens, `Codex VS Code record ${recordNumber} inputTokens`);
   const cacheReadTokens = tokenCount(fields.cachedInputTokens, `Codex VS Code record ${recordNumber} cachedInputTokens`);
   const outputTokens = tokenCount(fields.outputTokens, `Codex VS Code record ${recordNumber} outputTokens`);
   const inputTokens = Math.max(0, rawInputTokens - cacheReadTokens);
-  const sourceFileHash = sha256Hex(`path:${filePath}`);
   const sourceIdBasis = `codex-vscode-plugin:${sourceFileHash}:${occurredAt}:${recordNumber}:${fields.feature ?? ""}`;
 
   return usageEventDraftSchema.parse({

@@ -3,12 +3,105 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  initialCodexContext,
   parserAdapters,
   parseCodexFile,
+  parseCodexLine,
+  parseCodexVsCodeLine,
   parseCodexVsCodeFile
 } from "./index.js";
+import { sha256Hex } from "@codex-usage-dashboard/shared";
 
 describe("Codex parser adapters", () => {
+  it("preserves Codex context and IDs across incremental calls", async () => {
+    const contents = currentSession({ source: "cli", originator: "codex-tui" });
+    const filePath = await writeFixture("incremental.jsonl", contents);
+    const expected = await parseCodexFile(filePath);
+    const incremental = [];
+    let context = initialCodexContext();
+
+    for (const [index, line] of contents.split(/\r?\n/).entries()) {
+      const result = await parseCodexLine({
+        line,
+        lineNumber: index + 1,
+        context,
+        sourceIdentity: "unused",
+        filePath,
+        finalTail: false
+      });
+      context = result.context;
+      if (result.event) incremental.push(result.event);
+    }
+
+    expect(incremental).toEqual(expected);
+  });
+
+  it("keeps VS Code source identity after rename", async () => {
+    const line =
+      "2026-05-30 22:21:57.502Z [info] ephemeral_generation_token_usage cachedInputTokens=1536 event=ephemeral_generation_token_usage feature=coding_turn inputTokens=13321 model=gpt-5.5 outputTokens=94 totalTokens=13415";
+    const originalPath = "/logs/window1/openai.chatgpt/Codex.log";
+    const renamedPath = "/logs/window1/openai.chatgpt/Codex.1.log";
+    const sourceIdentity = sha256Hex(`path:${originalPath}`);
+    const context = {};
+    const before = await parseCodexVsCodeLine({
+      line, lineNumber: 1, context, sourceIdentity, filePath: originalPath, finalTail: false
+    });
+    const after = await parseCodexVsCodeLine({
+      line, lineNumber: 1, context, sourceIdentity, filePath: renamedPath, finalTail: false
+    });
+
+    expect(after.event?.sourceEventId).toBe(before.event?.sourceEventId);
+    expect(after.event?.metadata.sourceFileHash).toBe(sourceIdentity);
+  });
+
+  it("returns only a category and hash for malformed target records", async () => {
+    const codex = await parseCodexLine({
+      line: JSON.stringify({
+        timestamp: "2026-05-30T07:00:03.000Z",
+        type: "event_msg",
+        payload: { type: "token_count", info: { last_token_usage: { input_tokens: -1 } } }
+      }),
+      lineNumber: 9,
+      context: { ...initialCodexContext(), cwd: "/private/workspace" },
+      sourceIdentity: "source",
+      filePath: "/private/session.jsonl",
+      finalTail: false
+    });
+    const vscode = await parseCodexVsCodeLine({
+      line: "2026-05-30 22:21:57.502Z ephemeral_generation_token_usage event=ephemeral_generation_token_usage inputTokens=invalid",
+      lineNumber: 3,
+      context: {},
+      sourceIdentity: "source",
+      filePath: "/private/Codex.log",
+      finalTail: false
+    });
+
+    expect(codex.event).toBeUndefined();
+    expect(codex.malformed).toMatchObject({ category: "codex-token-record-invalid" });
+    expect(vscode.event).toBeUndefined();
+    expect(vscode.malformed).toMatchObject({ category: "codex-vscode-token-record-invalid" });
+    expect(JSON.stringify([codex.malformed, vscode.malformed])).not.toContain("private");
+  });
+
+  it("parses a complete rotated final tail without requiring a newline", async () => {
+    const line = JSON.stringify({
+      timestamp: "2026-05-30T10:00:00.000Z",
+      session_id: "rotated",
+      cwd: "/workspace/projects/example",
+      usage: { input_tokens: 7, output_tokens: 3 }
+    });
+    const result = await parseCodexLine({
+      line,
+      lineNumber: 4,
+      context: initialCodexContext(),
+      sourceIdentity: "rotated-source",
+      filePath: "/logs/rotated.jsonl",
+      finalTail: true
+    });
+
+    expect(result.event).toMatchObject({ toolSlug: "codex-cli", inputTokens: 7, outputTokens: 3 });
+  });
+
   it("registers only the two configured filesystem inputs", () => {
     expect(parserAdapters.map(({ slug }) => slug)).toEqual([
       "codex-cli",
@@ -140,7 +233,7 @@ describe("Codex parser adapters", () => {
     expect(JSON.stringify(events)).not.toContain("private prompt");
   });
 
-  it("rejects malformed token values with record context", async () => {
+  it("quarantines malformed token values without exposing record content", async () => {
     const record = {
       timestamp: "2026-05-30T07:00:00.000Z",
       session_id: "bad",
@@ -150,7 +243,7 @@ describe("Codex parser adapters", () => {
 
     await expect(
       parseCodexFile(await writeFixture("bad-token.jsonl", JSON.stringify(record)))
-    ).rejects.toThrow(/Codex record 1 input_tokens/);
+    ).rejects.toThrow(/Codex record 1 invalid/);
   });
 
   it("skips malformed JSONL lines while preserving valid records", async () => {
