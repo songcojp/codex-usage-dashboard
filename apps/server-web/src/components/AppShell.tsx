@@ -86,6 +86,10 @@ export function AppShell({
       >
         <DashboardIcon name={mobileNavigationOpen ? "close" : "menu"} />
       </button>
+      <div className="mobile-brand-bar" aria-hidden="true">
+        <span className="dashboard-brand-mark">C</span>
+        <span>Codex Usage</span>
+      </div>
 
       <aside className="dashboard-sidebar">
         <div className="dashboard-brand" aria-label="Codex Usage Dashboard">

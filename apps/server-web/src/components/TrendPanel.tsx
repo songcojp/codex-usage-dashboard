@@ -133,6 +133,7 @@ export function createTrendChartOption(
   const visibleSeries = trendFilter === "cost" ? [series[4]] : trendFilter === "tokens" ? series.slice(0, 4) : series;
 
   return {
+    backgroundColor: theme === "dark" ? "#0d1b2e" : "#ffffff",
     color: visibleSeries.map((item) => item.itemStyle.color),
     grid: { top: 40, right: 18, bottom: 32, left: 58 },
     tooltip: {

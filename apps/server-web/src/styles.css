@@ -1188,6 +1188,7 @@ td {
 }
 
 .metrics-overview .metric-card {
+  grid-column: auto;
   min-height: 96px;
   padding: 15px;
   border-radius: 10px;
@@ -1225,6 +1226,10 @@ td {
   margin-top: auto;
   border-radius: 6px;
   background: var(--secondary);
+}
+
+.metrics-overview .metric-digit-stack {
+  transition: none;
 }
 
 .trend-panel {
@@ -1279,6 +1284,17 @@ td {
   display: none;
 }
 
+.mobile-brand-bar,
+.filters-label-mobile {
+  display: none;
+}
+
+#dashboard-overview:focus,
+#dashboard-trend:focus,
+#dashboard-explorer:focus {
+  outline: none;
+}
+
 .login-bg-glow {
   display: none;
 }
@@ -1328,7 +1344,7 @@ td {
   }
 
   .metrics-overview {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .metrics-overview .metric-card-primary {
@@ -1358,6 +1374,18 @@ td {
     transition: transform 180ms ease;
   }
 
+  .mobile-brand-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 64px;
+    padding: 0 16px;
+    color: #ffffff;
+    background: var(--sidebar);
+    font-size: 0.95rem;
+    font-weight: 800;
+  }
+
   .dashboard-sidebar:has(.dashboard-navigation[data-mobile-open="true"]) {
     transform: translateY(0);
   }
@@ -1378,7 +1406,7 @@ td {
   .mobile-navigation-trigger {
     position: fixed;
     top: 12px;
-    left: 14px;
+    right: 14px;
     z-index: 60;
     display: grid;
     width: 38px;
@@ -1386,8 +1414,9 @@ td {
     place-items: center;
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    color: var(--text-primary);
-    background: var(--bg-panel);
+    color: #ffffff;
+    background: var(--sidebar-raised);
+    border-color: rgba(255, 255, 255, 0.2);
   }
 
   .dashboard-main.app-shell {
@@ -1396,7 +1425,7 @@ td {
 
   .command-center-header {
     align-items: flex-start;
-    padding-left: 48px;
+    padding-left: 0;
   }
 
   .command-center-title h1 {
@@ -1421,9 +1450,41 @@ td {
   }
 
   .filter-toolbar-primary,
-  .filter-toolbar-secondary,
-  .metrics-overview {
+  .filter-toolbar-secondary {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .filter-toolbar-primary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .filter-toolbar-primary > label {
+    display: none;
+    grid-column: 1 / -1;
+  }
+
+  .filter-toolbar[data-expanded="true"] .filter-toolbar-primary > label {
+    display: grid;
+  }
+
+  .filter-toolbar-secondary {
+    grid-column: 1 / -1;
+  }
+
+  .more-filters-button {
+    width: 100%;
+  }
+
+  .filters-label-default {
+    display: none;
+  }
+
+  .filters-label-mobile {
+    display: inline;
+  }
+
+  .metrics-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .date-range-group {
@@ -1431,7 +1492,7 @@ td {
   }
 
   .metrics-overview .metric-card-primary {
-    grid-column: auto;
+    grid-column: 1 / -1;
   }
 
   .overview-grid {
@@ -1463,5 +1524,15 @@ td {
 
   .price-form {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 340px) {
+  .metrics-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .metrics-overview .metric-card-primary {
+    grid-column: auto;
   }
 }

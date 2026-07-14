@@ -32,7 +32,11 @@ export function FilterToolbar({
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
 
   return (
-    <section className="filter-toolbar" aria-label={t("Dashboard filters")}>
+    <section
+      className="filter-toolbar"
+      aria-label={t("Dashboard filters")}
+      data-expanded={String(moreFiltersOpen)}
+    >
       <div className="filter-toolbar-primary">
         <fieldset className="date-range-group">
           <legend>{t("Date range")}</legend>
@@ -92,6 +96,7 @@ export function FilterToolbar({
           </select>
         </label>
         <button
+          aria-label={t(moreFiltersOpen ? "Close filters" : "More filters")}
           aria-controls="dashboard-more-filters"
           aria-expanded={moreFiltersOpen}
           className="more-filters-button"
@@ -99,7 +104,8 @@ export function FilterToolbar({
           type="button"
         >
           <DashboardIcon name={moreFiltersOpen ? "close" : "more"} size={18} />
-          {t(moreFiltersOpen ? "Close filters" : "More filters")}
+          <span className="filters-label-default">{t(moreFiltersOpen ? "Close filters" : "More filters")}</span>
+          <span className="filters-label-mobile">{t(moreFiltersOpen ? "Close filters" : "Filters")}</span>
         </button>
       </div>
 
