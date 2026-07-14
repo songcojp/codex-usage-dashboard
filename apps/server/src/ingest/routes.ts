@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { DeviceAuthError } from "../devices/service.js";
-import { hashBearerToken } from "./auth.js";
+import { hashBearerTokenCandidates } from "./auth.js";
 import {
   ingestBatch,
   IngestValidationError,
@@ -22,10 +22,10 @@ export async function registerIngestRoutes(
   const ingestEvents = options.ingestEvents ?? ingestBatch;
 
   app.post("/api/ingest/events", async (request, reply) => {
-    let tokenHash: string;
+    let tokenHashes: [string, string];
 
     try {
-      tokenHash = hashBearerToken(request.headers.authorization);
+      tokenHashes = hashBearerTokenCandidates(request.headers.authorization);
     } catch {
       return reply.code(401).send({ error: "missing bearer token" });
     }
@@ -41,16 +41,21 @@ export async function registerIngestRoutes(
       throw error;
     }
 
-    request.log.info({ tokenHash, eventCount: batch.events.length }, "validated ingest batch");
+    request.log.info({ eventCount: batch.events.length }, "validated ingest batch");
 
-    try {
-      return summarizeIngestResult(await ingestEvents({ tokenHash, batch }));
-    } catch (error) {
-      if (error instanceof DeviceAuthError) {
-        return reply.code(401).send({ error: "invalid device token" });
+    for (const [index, tokenHash] of tokenHashes.entries()) {
+      try {
+        return summarizeIngestResult(await ingestEvents({ tokenHash, batch }));
+      } catch (error) {
+        if (error instanceof DeviceAuthError && index < tokenHashes.length - 1) continue;
+        if (error instanceof DeviceAuthError) {
+          return reply.code(401).send({ error: "invalid device token" });
+        }
+
+        throw error;
       }
-
-      throw error;
     }
+
+    return reply.code(401).send({ error: "invalid device token" });
   });
 }

@@ -1,6 +1,7 @@
-import { hashToken } from "@codex-usage-dashboard/shared";
+import { hashToken, sha256Hex } from "@codex-usage-dashboard/shared";
 
 const bearerPrefix = "Bearer ";
+const legacyDeviceTokenNamespace = ["token", "-report-device-token:"].join("");
 
 export function readBearerToken(header: string | undefined): string {
   if (!header?.startsWith(bearerPrefix)) {
@@ -16,5 +17,10 @@ export function readBearerToken(header: string | undefined): string {
 }
 
 export function hashBearerToken(header: string | undefined): string {
-  return hashToken(readBearerToken(header));
+  return hashBearerTokenCandidates(header)[0];
+}
+
+export function hashBearerTokenCandidates(header: string | undefined): [string, string] {
+  const token = readBearerToken(header);
+  return [hashToken(token), sha256Hex(`${legacyDeviceTokenNamespace}${token}`)];
 }

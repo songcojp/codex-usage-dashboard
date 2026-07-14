@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { hashToken } from "@codex-usage-dashboard/shared";
 import { buildApp } from "../app.js";
 import { DeviceAuthError } from "../devices/service.js";
 import type { IngestResult } from "./service.js";
@@ -121,5 +122,20 @@ describe("POST /api/ingest/events", () => {
 
     expect(response.statusCode).toBe(401);
     expect(response.json()).toEqual({ error: "invalid device token" });
+  });
+
+  it("falls back to the legacy token hash for migrated devices", async () => {
+    const attemptedHashes: string[] = [];
+    const response = await postEvents(validPayload, "Bearer device-token", async ({ tokenHash }) => {
+      attemptedHashes.push(tokenHash);
+      if (attemptedHashes.length === 1) throw new DeviceAuthError();
+      return { inserted: 1, duplicates: 0, rejected: [] };
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(attemptedHashes).toEqual([
+      hashToken("device-token"),
+      "3e6ac30708331620d70972bdba4e6f0ac619e7848bf21f48257cbc828491ce82"
+    ]);
   });
 });

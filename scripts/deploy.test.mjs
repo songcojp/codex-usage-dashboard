@@ -46,3 +46,17 @@ test("compose declares stable project and volume identities", async () => {
     assert.match(compose, new RegExp(`name: codex-usage-dashboard-${volume}`));
   }
 });
+
+test("compose can select the private-IP Caddy configuration", async () => {
+  const compose = await readFile(path.join(repoRoot, "deploy", "docker-compose.yml"), "utf8");
+  const privateCaddyfile = await readFile(
+    path.join(repoRoot, "deploy", "caddy", "Caddyfile.private"),
+    "utf8"
+  );
+
+  assert.match(compose, /CADDY_CONFIG_FILE/);
+  assert.match(compose, /CADDY_DEFAULT_SNI/);
+  assert.match(privateCaddyfile, /default_sni \{\$CADDY_DEFAULT_SNI\}/);
+  assert.match(privateCaddyfile, /tls internal/);
+  assert.doesNotMatch(privateCaddyfile, /\b(?:\d{1,3}\.){3}\d{1,3}\b/);
+});

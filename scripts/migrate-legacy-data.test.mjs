@@ -62,6 +62,12 @@ elif [[ "$1" == "inspect" ]]; then
   else
     echo "target-volume"
   fi
+elif [[ "$1" == "compose" && "\${FAKE_DOCKER_SCENARIO:-}" == "health-transient" && "$*" == *" exec -T server node -e "* ]]; then
+  attempts=0
+  if [[ -f "$FAKE_HEALTH_STATE" ]]; then attempts="$(cat "$FAKE_HEALTH_STATE")"; fi
+  attempts=$((attempts + 1))
+  echo "$attempts" > "$FAKE_HEALTH_STATE"
+  [[ "$attempts" -gt 1 ]]
 elif [[ "$1" == "exec" ]]; then
   input="$(cat)"
   if [[ "$*" == *"pg_dump"* ]]; then
@@ -245,6 +251,27 @@ test("restarts both previously running servers when promotion fails", async () =
     const log = await readFile(dockerLog, "utf8");
     assert.match(log, new RegExp(`${escapeRegex(source)}.* start server`));
     assert.match(log, new RegExp(`${escapeRegex(target)}.* start server`));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("retries the target health check while the restarted server is booting", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "cud-migration-test-"));
+  const source = await createFakeDeployment(root, "source");
+  const target = await createFakeDeployment(root, "target");
+  const healthState = path.join(root, "health-attempts");
+  const { fakeBin, dockerLog } = await createFakeDocker(root);
+
+  try {
+    const result = runMigration([source, target, path.join(root, "backups")], {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      FAKE_DOCKER_LOG: dockerLog,
+      FAKE_DOCKER_SCENARIO: "health-transient",
+      FAKE_HEALTH_STATE: healthState
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(await readFile(healthState, "utf8"), "2\n");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
