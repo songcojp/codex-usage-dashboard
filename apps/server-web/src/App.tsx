@@ -200,7 +200,12 @@ const translations: Record<Language, Record<string, string>> = {
     "Token usage trend chart": "Token 用量趋势图",
     "Failed to load dashboard": "加载看板失败",
     "Failed to save model price": "保存模型价格失败",
-    "Failed to delete model price": "删除模型价格失败"
+    "Failed to delete model price": "删除模型价格失败",
+    "Daily": "单日用量",
+    "Cumulative": "累计用量",
+    "All": "全部显示",
+    "Tokens": "仅显 Token",
+    "Cost": "仅显成本"
   },
   ja: {
     "Checking admin session...": "管理者セッションを確認しています...",
@@ -304,7 +309,12 @@ const translations: Record<Language, Record<string, string>> = {
     "Token usage trend chart": "Token 使用量推移グラフ",
     "Failed to load dashboard": "ダッシュボードの読み込みに失敗しました",
     "Failed to save model price": "モデル価格の保存に失敗しました",
-    "Failed to delete model price": "モデル価格の削除に失敗しました"
+    "Failed to delete model price": "モデル価格の削除に失敗しました",
+    "Daily": "日次",
+    "Cumulative": "累加",
+    "All": "すべて",
+    "Tokens": "トークン",
+    "Cost": "コスト"
   },
   ko: {
     "Checking admin session...": "관리자 세션을 확인하는 중...",
@@ -408,7 +418,12 @@ const translations: Record<Language, Record<string, string>> = {
     "Token usage trend chart": "Token 사용량 추세 차트",
     "Failed to load dashboard": "대시보드를 불러오지 못했습니다",
     "Failed to save model price": "모델 가격을 저장하지 못했습니다",
-    "Failed to delete model price": "모델 가격을 삭제하지 못했습니다"
+    "Failed to delete model price": "모델 가격을 삭제하지 못했습니다",
+    "Daily": "일별",
+    "Cumulative": "누적",
+    "All": "전체",
+    "Tokens": "토큰",
+    "Cost": "비용"
   }
 };
 use([GridComponent, LegendComponent, LineChart, TooltipComponent, CanvasRenderer]);
@@ -427,6 +442,24 @@ export function App() {
   const [priceDraft, setPriceDraft] = useState<PriceDraft>(emptyPriceDraft);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    if (typeof window !== "undefined") {
+      const stored = window.localStorage.getItem("codex-dashboard-theme");
+      if (stored === "light" || stored === "dark") return stored;
+      if (typeof window.matchMedia === "function") {
+        return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+    }
+    return "light";
+  });
+  const [trendMode, setTrendMode] = useState<"daily" | "cumulative">("daily");
+  const [trendFilter, setTrendFilter] = useState<"all" | "cost" | "tokens">("all");
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    window.localStorage.setItem("codex-dashboard-theme", theme);
+  }, [theme]);
 
   const from = filters.from;
   const to = filters.to;
@@ -593,6 +626,8 @@ export function App() {
         languageSetting={languageSetting}
         onLanguageChange={handleLanguageChange}
         t={t}
+        theme={theme}
+        onThemeToggle={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
         onLogin={async (email, password) => {
           await login(email, password);
           setAdminEmail(email);
@@ -613,6 +648,30 @@ export function App() {
         </div>
         <div className="topbar-actions">
           <LanguageSelect value={languageSetting} onChange={handleLanguageChange} t={t} />
+          <button
+            type="button"
+            className="theme-toggle-button"
+            onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
+            aria-label="Toggle Theme"
+          >
+            {theme === "light" ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="5"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+              </svg>
+            )}
+          </button>
           <span className="admin-chip">{adminEmail}</span>
           <button type="button" className="secondary-button" onClick={handleLogout} disabled={loading}>
             {t("Logout")}
@@ -731,8 +790,59 @@ export function App() {
       </section>
 
       <section className="panel chart-panel">
-        <PanelHeader title={t("Usage trend")} meta={`${filters.from} to ${filters.to} (${filters.timeZone})`} />
-        <TrendChart points={data?.trends.points ?? []} loading={loading && !data} language={language} t={t} />
+        <div className="chart-header-row">
+          <PanelHeader title={t("Usage trend")} meta={`${filters.from} to ${filters.to} (${filters.timeZone})`} />
+          <div className="chart-controls">
+            <div className="toggle-group" role="group" aria-label="Trend Mode">
+              <button
+                type="button"
+                className={trendMode === "daily" ? "toggle-btn active" : "toggle-btn"}
+                onClick={() => setTrendMode("daily")}
+              >
+                {t("Daily")}
+              </button>
+              <button
+                type="button"
+                className={trendMode === "cumulative" ? "toggle-btn active" : "toggle-btn"}
+                onClick={() => setTrendMode("cumulative")}
+              >
+                {t("Cumulative")}
+              </button>
+            </div>
+            <div className="toggle-group" role="group" aria-label="Trend Filter">
+              <button
+                type="button"
+                className={trendFilter === "all" ? "toggle-btn active" : "toggle-btn"}
+                onClick={() => setTrendFilter("all")}
+              >
+                {t("All")}
+              </button>
+              <button
+                type="button"
+                className={trendFilter === "tokens" ? "toggle-btn active" : "toggle-btn"}
+                onClick={() => setTrendFilter("tokens")}
+              >
+                {t("Tokens")}
+              </button>
+              <button
+                type="button"
+                className={trendFilter === "cost" ? "toggle-btn active" : "toggle-btn"}
+                onClick={() => setTrendFilter("cost")}
+              >
+                {t("Cost")}
+              </button>
+            </div>
+          </div>
+        </div>
+        <TrendChart
+          points={data?.trends.points ?? []}
+          loading={loading && !data}
+          language={language}
+          t={t}
+          theme={theme}
+          trendMode={trendMode}
+          trendFilter={trendFilter}
+        />
       </section>
 
       <section className="panel">
@@ -791,11 +901,15 @@ function LoginScreen({
   languageSetting,
   onLanguageChange,
   onLogin,
+  theme,
+  onThemeToggle,
   t
 }: {
   languageSetting: LanguageSetting;
   onLanguageChange: (value: LanguageSetting) => void;
   onLogin: (email: string, password: string) => Promise<void>;
+  theme: "light" | "dark";
+  onThemeToggle: () => void;
   t: (key: string) => string;
 }) {
   const [email, setEmail] = useState("");
@@ -818,10 +932,38 @@ function LoginScreen({
 
   return (
     <main className="login-layout">
+      <div className="login-bg-glow login-bg-glow-1"></div>
+      <div className="login-bg-glow login-bg-glow-2"></div>
       <form className="login-panel" onSubmit={handleSubmit}>
-        <div>
-          <p className="eyebrow">{t("Codex Usage")}</p>
-          <h1>{t("Admin login")}</h1>
+        <div className="login-header-row">
+          <div>
+            <p className="eyebrow">{t("Codex Usage")}</p>
+            <h1>{t("Admin login")}</h1>
+          </div>
+          <button
+            type="button"
+            className="theme-toggle-button"
+            onClick={onThemeToggle}
+            aria-label="Toggle Theme"
+          >
+            {theme === "light" ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="5"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+              </svg>
+            )}
+          </button>
         </div>
         <LanguageSelect value={languageSetting} onChange={onLanguageChange} t={t} />
         <label>
@@ -876,6 +1018,62 @@ function LanguageSelect({
   );
 }
 
+function getMetricIcon(label: string) {
+  const lowercase = label.toLowerCase();
+  if (lowercase.includes("total") || lowercase.includes("总") || lowercase.includes("합계")) {
+    return (
+      <div className="metric-icon total">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+        </svg>
+      </div>
+    );
+  }
+  if (lowercase.includes("cache") || lowercase.includes("缓存") || lowercase.includes("캐시")) {
+    return (
+      <div className="metric-icon cache">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M22 12H2M22 6H2M22 18H2"></path>
+          <circle cx="12" cy="6" r="1.5"></circle>
+          <circle cx="12" cy="12" r="1.5"></circle>
+          <circle cx="12" cy="18" r="1.5"></circle>
+        </svg>
+      </div>
+    );
+  }
+  if (lowercase.includes("input") || lowercase.includes("输入") || lowercase.includes("입력")) {
+    return (
+      <div className="metric-icon input">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <polyline points="19 12 12 19 5 12"></polyline>
+        </svg>
+      </div>
+    );
+  }
+  if (lowercase.includes("output") || lowercase.includes("输出") || lowercase.includes("출력")) {
+    return (
+      <div className="metric-icon output">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="12" y1="19" x2="12" y2="5"></line>
+          <polyline points="5 12 12 5 19 12"></polyline>
+        </svg>
+      </div>
+    );
+  }
+  if (lowercase.includes("cost") || lowercase.includes("成本") || lowercase.includes("비용")) {
+    return (
+      <div className="metric-icon cost">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="12" y1="1" x2="12" y2="23"></line>
+          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+        </svg>
+      </div>
+    );
+  }
+  return null;
+}
+
 function MetricCard({
   label,
   value,
@@ -908,7 +1106,10 @@ function MetricCard({
 
   return (
     <article className="metric-card">
-      <span>{label}</span>
+      <div className="metric-card-header">
+        <span>{label}</span>
+        {getMetricIcon(label)}
+      </div>
       <strong className={animating ? "metric-value updating" : "metric-value"}>
         <span className="sr-only">{formattedValue}</span>
         <RollingMetricValue value={formattedValue} />
@@ -946,28 +1147,192 @@ function RollingMetricValue({ value }: { value: string }) {
   );
 }
 
-export function createTrendChartOption(points: TrendPoint[], t: (key: string) => string, language: Language) {
-  const labels = points.map((point) => formatUtcDateLabel(point.day));
-  const totals = points.map((point) => point.totalTokens);
-  const inputs = points.map((point) => point.inputTokens);
-  const outputs = points.map((point) => point.outputTokens);
-  const cacheTokens = points.map((point) => point.cacheReadTokens + point.cacheWriteTokens);
-  const costs = points.map((point) => point.costUsd);
+export function createTrendChartOption(
+  points: TrendPoint[],
+  t: (key: string) => string,
+  language: Language,
+  theme: "light" | "dark" = "light",
+  trendMode: "daily" | "cumulative" = "daily",
+  trendFilter: "all" | "cost" | "tokens" = "all"
+) {
+  let processedPoints = [...points];
+  if (trendMode === "cumulative") {
+    let cumulativeTotal = 0;
+    let cumulativeInput = 0;
+    let cumulativeOutput = 0;
+    let cumulativeCache = 0;
+    let cumulativeCost = 0;
+
+    processedPoints = points.map((point) => {
+      cumulativeTotal += point.totalTokens;
+      cumulativeInput += point.inputTokens;
+      cumulativeOutput += point.outputTokens;
+      cumulativeCache += (point.cacheReadTokens + point.cacheWriteTokens);
+      cumulativeCost += point.costUsd;
+
+      return {
+        ...point,
+        totalTokens: cumulativeTotal,
+        inputTokens: cumulativeInput,
+        outputTokens: cumulativeOutput,
+        cacheReadTokens: cumulativeCache,
+        cacheWriteTokens: 0,
+        costUsd: cumulativeCost
+      };
+    });
+  }
+
+  const labels = processedPoints.map((point) => formatUtcDateLabel(point.day));
+  const totals = processedPoints.map((point) => point.totalTokens);
+  const inputs = processedPoints.map((point) => point.inputTokens);
+  const outputs = processedPoints.map((point) => point.outputTokens);
+  const cacheTokens = processedPoints.map((point) => point.cacheReadTokens + point.cacheWriteTokens);
+  const costs = processedPoints.map((point) => point.costUsd);
+
+  const isDark = theme === "dark";
+  const textColor = isDark ? "#94a3b8" : "#475569";
+  const splitLineColor = isDark ? "rgba(148, 163, 184, 0.06)" : "#e2e8f0";
+  const axisLineColor = isDark ? "rgba(148, 163, 184, 0.15)" : "#cbd5e1";
+
+  const colors = isDark
+    ? ["#3b82f6", "#14b8a6", "#f97316", "#06b6d4", "#a855f7"]
+    : ["#2563eb", "#0f766e", "#b45309", "#0891b2", "#7c3aed"];
+
+  const areaColors = isDark
+    ? [
+        { start: "rgba(59, 130, 246, 0.22)", end: "rgba(59, 130, 246, 0.01)" },
+        { start: "rgba(20, 184, 166, 0.18)", end: "rgba(20, 184, 166, 0.01)" },
+        { start: "rgba(249, 115, 22, 0.18)", end: "rgba(249, 115, 22, 0.01)" },
+        { start: "rgba(6, 182, 212, 0.18)", end: "rgba(6, 182, 212, 0.01)" },
+        { start: "rgba(168, 85, 247, 0.22)", end: "rgba(168, 85, 247, 0.01)" }
+      ]
+    : [
+        { start: "rgba(37, 99, 235, 0.18)", end: "rgba(37, 99, 235, 0.00)" },
+        { start: "rgba(15, 118, 110, 0.12)", end: "rgba(15, 118, 110, 0.00)" },
+        { start: "rgba(180, 83, 9, 0.12)", end: "rgba(180, 83, 9, 0.00)" },
+        { start: "rgba(8, 145, 178, 0.12)", end: "rgba(8, 145, 178, 0.00)" },
+        { start: "rgba(124, 58, 237, 0.18)", end: "rgba(124, 58, 237, 0.00)" }
+      ];
+
+  const allSeries = [
+    {
+      name: t("Total tokens"),
+      type: "line",
+      smooth: true,
+      data: totals,
+      symbolSize: 6,
+      itemStyle: { color: colors[0] },
+      lineStyle: { width: 3 },
+      areaStyle: {
+        color: {
+          type: "linear", x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [{ offset: 0, color: areaColors[0].start }, { offset: 1, color: areaColors[0].end }]
+        }
+      }
+    },
+    {
+      name: t("Input"),
+      type: "line",
+      smooth: true,
+      data: inputs,
+      symbolSize: 5,
+      itemStyle: { color: colors[1] },
+      lineStyle: { width: 2 },
+      areaStyle: {
+        color: {
+          type: "linear", x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [{ offset: 0, color: areaColors[1].start }, { offset: 1, color: areaColors[1].end }]
+        }
+      }
+    },
+    {
+      name: t("Output"),
+      type: "line",
+      smooth: true,
+      data: outputs,
+      symbolSize: 5,
+      itemStyle: { color: colors[2] },
+      lineStyle: { width: 2 },
+      areaStyle: {
+        color: {
+          type: "linear", x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [{ offset: 0, color: areaColors[2].start }, { offset: 1, color: areaColors[2].end }]
+        }
+      }
+    },
+    {
+      name: t("Cache"),
+      type: "line",
+      smooth: true,
+      data: cacheTokens,
+      symbolSize: 5,
+      itemStyle: { color: colors[3] },
+      lineStyle: { width: 2 },
+      areaStyle: {
+        color: {
+          type: "linear", x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [{ offset: 0, color: areaColors[3].start }, { offset: 1, color: areaColors[3].end }]
+        }
+      }
+    },
+    {
+      name: t("Cost"),
+      type: "line",
+      smooth: true,
+      data: costs,
+      symbolSize: 5,
+      itemStyle: { color: colors[4] },
+      lineStyle: { width: 2.5 },
+      areaStyle: {
+        color: {
+          type: "linear", x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [{ offset: 0, color: areaColors[4].start }, { offset: 1, color: areaColors[4].end }]
+        }
+      }
+    }
+  ];
+
+  let series = allSeries;
+  let activeColors = colors;
+  if (trendFilter === "cost") {
+    series = [allSeries[4]];
+    activeColors = [colors[4]];
+  } else if (trendFilter === "tokens") {
+    series = [allSeries[0], allSeries[1], allSeries[2], allSeries[3]];
+    activeColors = [colors[0], colors[1], colors[2], colors[3]];
+  }
 
   return {
-    color: ["#2563eb", "#0f766e", "#b45309", "#0891b2", "#7c3aed"],
-    grid: { top: 28, right: 18, bottom: 32, left: 58 },
-    tooltip: { trigger: "axis" },
-    legend: { top: 0, right: 0, textStyle: { color: "#475569" } },
-    xAxis: { type: "category", data: labels, boundaryGap: false },
-    yAxis: { type: "value", axisLabel: { formatter: (value: number) => compactNumber(value, language) } },
-    series: [
-      { name: t("Total tokens"), type: "line", smooth: true, data: totals, symbolSize: 6 },
-      { name: t("Input"), type: "line", smooth: true, data: inputs, symbolSize: 5 },
-      { name: t("Output"), type: "line", smooth: true, data: outputs, symbolSize: 5 },
-      { name: t("Cache"), type: "line", smooth: true, data: cacheTokens, symbolSize: 5 },
-      { name: t("Cost"), type: "line", smooth: true, data: costs, symbolSize: 5 }
-    ]
+    color: activeColors,
+    grid: { top: 36, right: 18, bottom: 32, left: 58 },
+    tooltip: {
+      trigger: "axis",
+      backgroundColor: isDark ? "rgba(17, 24, 39, 0.85)" : "rgba(255, 255, 255, 0.85)",
+      borderColor: isDark ? "rgba(255, 255, 255, 0.12)" : "rgba(15, 23, 42, 0.08)",
+      textStyle: { color: isDark ? "#f3f4f6" : "#1e293b" },
+      extraCssText: "backdrop-filter: blur(10px); border-radius: 8px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);"
+    },
+    legend: {
+      top: 0,
+      right: 0,
+      textStyle: { color: textColor }
+    },
+    xAxis: {
+      type: "category",
+      data: labels,
+      boundaryGap: false,
+      axisLabel: { color: textColor },
+      axisLine: { lineStyle: { color: axisLineColor } }
+    },
+    yAxis: {
+      type: "value",
+      axisLabel: {
+        color: textColor,
+        formatter: (value: number) => compactNumber(value, language)
+      },
+      splitLine: { lineStyle: { color: splitLineColor } }
+    },
+    series
   };
 }
 
@@ -975,15 +1340,24 @@ function TrendChart({
   points,
   loading,
   language,
-  t
+  t,
+  theme,
+  trendMode,
+  trendFilter
 }: {
   points: TrendPoint[];
   loading: boolean;
   language: Language;
   t: (key: string) => string;
+  theme: "light" | "dark";
+  trendMode: "daily" | "cumulative";
+  trendFilter: "all" | "cost" | "tokens";
 }) {
   const chartElement = useRef<HTMLDivElement | null>(null);
-  const chartOption = useMemo(() => createTrendChartOption(points, t, language), [language, points, t]);
+  const chartOption = useMemo(
+    () => createTrendChartOption(points, t, language, theme, trendMode, trendFilter),
+    [language, points, t, theme, trendMode, trendFilter]
+  );
 
   useEffect(() => {
     if (!chartElement.current || loading) {
