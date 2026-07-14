@@ -40,10 +40,10 @@ function resolveShell() {
   if (process.env.BASH) {
     return { command: process.env.BASH, prefixArgs: [] };
   }
-
-  const where = spawnSync("where.exe", ["bash"], { encoding: "utf8" });
-  const firstPath = where.status === 0 ? where.stdout.split(/\r?\n/).find(Boolean) : null;
-  return firstPath ? { command: firstPath, prefixArgs: [] } : null;
+  // Git Bash cannot reliably pass extra file descriptors to native Windows
+  // Node or fsync directories, so Linux-installer tests require an explicit
+  // compatible Bash path. Windows behavior is exercised by ValidateOnly.
+  return null;
 }
 
 test("requires server URL, environment token, and device name", shellTestOptions, () => {
