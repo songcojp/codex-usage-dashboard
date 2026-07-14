@@ -1,0 +1,1 @@
+{"timestamp":"2026-05-30T01:00:00.000Z","session_id":"s1","cwd":"/workspace/projects/example","model":"gpt-5","usage":{"input_tokens":100,"output_tokens":50,"cache_read_tokens":10,"cache_write_tokens":5}}

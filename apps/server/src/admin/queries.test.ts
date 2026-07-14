@@ -1,0 +1,82 @@
+import { describe, expect, it } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
+import {
+  mergeProjectRowsByRepoHash,
+  reportingDaySql,
+  reportingDayUtcRange
+} from "./queries.js";
+
+describe("reportingDayUtcRange", () => {
+  it("converts a +09:00 reporting day into its UTC query range", () => {
+    expect(reportingDayUtcRange("2026-05-31", "Asia/Tokyo")).toEqual({
+      start: new Date("2026-05-30T15:00:00.000Z"),
+      end: new Date("2026-05-31T14:59:59.999Z")
+    });
+  });
+
+  it("uses the selected reporting timezone instead of a fixed +09:00 day", () => {
+    expect(reportingDayUtcRange("2026-05-31", "UTC")).toEqual({
+      start: new Date("2026-05-31T00:00:00.000Z"),
+      end: new Date("2026-05-31T23:59:59.999Z")
+    });
+  });
+});
+
+describe("reportingDaySql", () => {
+  it("embeds whitelisted timezones as a stable literal for grouped trend queries", () => {
+    const expression = reportingDaySql({
+      from: "2026-05-18",
+      to: "2026-05-31",
+      timeZone: "Asia/Tokyo"
+    });
+
+    const query = new PgDialect().sqlToQuery(expression);
+
+    expect(query.sql).toContain("AT TIME ZONE 'Asia/Tokyo'");
+    expect(query.params).toEqual([]);
+  });
+});
+
+describe("admin project query helpers", () => {
+  it("aggregates project totals by repo hash across local paths", () => {
+    const rows = mergeProjectRowsByRepoHash([
+      {
+        id: "project-a",
+        displayName: "codex-usage-dashboard",
+        repoHash: "repo-hash",
+        remoteHash: "remote-a",
+        pathHash: "path-a",
+        createdAt: new Date("2026-05-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-05-02T00:00:00.000Z"),
+        totalTokens: "10",
+        costUsd: "0.25",
+        eventCount: 1
+      },
+      {
+        id: "project-b",
+        displayName: "codex-usage-dashboard",
+        repoHash: "repo-hash",
+        remoteHash: "remote-b",
+        pathHash: "path-b",
+        createdAt: new Date("2026-05-03T00:00:00.000Z"),
+        updatedAt: new Date("2026-05-04T00:00:00.000Z"),
+        totalTokens: "15",
+        costUsd: "0.5",
+        eventCount: "2"
+      }
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: "project-a",
+      displayName: "codex-usage-dashboard",
+      repoHash: "repo-hash",
+      remoteHash: "remote-a",
+      pathHash: "path-a",
+      totalTokens: 25,
+      costUsd: 0.75,
+      eventCount: 3
+    });
+    expect(rows[0]?.updatedAt).toEqual(new Date("2026-05-04T00:00:00.000Z"));
+  });
+});

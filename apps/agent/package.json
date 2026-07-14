@@ -1,0 +1,20 @@
+{
+  "name": "@codex-usage-dashboard/agent",
+  "type": "module",
+  "bin": {
+    "codex-usage-dashboard-agent": "dist/cli.js"
+  },
+  "scripts": {
+    "cli": "tsx src/cli.ts",
+    "prebuild": "npm --workspace @codex-usage-dashboard/shared run build",
+    "build": "tsc -p tsconfig.json",
+    "pretest": "npm --workspace @codex-usage-dashboard/shared run build",
+    "test": "vitest run",
+    "pretypecheck": "npm --workspace @codex-usage-dashboard/shared run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@codex-usage-dashboard/shared": "*",
+    "commander": "^12.1.0"
+  }
+}

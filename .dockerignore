@@ -1,0 +1,14 @@
+.git
+.superpowers
+node_modules
+npm-debug.log*
+*.log
+.env
+.env.*
+!/.env.example
+
+apps/*/dist
+packages/*/dist
+apps/server/public
+apps/*/node_modules
+packages/*/node_modules
