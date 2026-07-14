@@ -1,3 +1,5 @@
+name: codex-usage-dashboard
+
 services:
   postgres:
     image: postgres:16
@@ -44,5 +46,8 @@ services:
 
 volumes:
   postgres-data:
+    name: codex-usage-dashboard-postgres
   caddy-data:
+    name: codex-usage-dashboard-caddy-data
   caddy-config:
+    name: codex-usage-dashboard-caddy-config

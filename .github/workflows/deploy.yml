@@ -48,7 +48,11 @@ jobs:
           set -euo pipefail
 
           bash -n scripts/deploy.sh
+          bash -n scripts/lib/deploy-guards.sh
+          bash -n scripts/lib/migration-common.sh
+          bash -n scripts/migrate-legacy-data.sh
           bash -n scripts/verify-local.sh
+          node --test scripts/deploy.test.mjs scripts/migrate-legacy-data.test.mjs
           grep -q 'docker compose' scripts/deploy.sh
           grep -q 'migrate.js' scripts/deploy.sh
           grep -q '/api/health' scripts/deploy.sh
@@ -90,10 +94,10 @@ jobs:
           : "${DEPLOY_PATH:?DEPLOY_PATH secret is required}"
           : "${DEPLOY_USER:?DEPLOY_USER secret is required}"
 
-          case "$DEPLOY_PATH" in
-            /opt/*|/srv/*) ;;
+          case "${DEPLOY_PATH%/}" in
+            /opt/codex-usage-dashboard|/srv/codex-usage-dashboard) ;;
             *)
-              echo "DEPLOY_PATH must be under /opt or /srv." >&2
+              echo "DEPLOY_PATH must be the dedicated Codex Usage Dashboard path." >&2
               exit 1
               ;;
           esac

@@ -63,7 +63,9 @@ Configure these Environment secrets:
 - `DEPLOY_SSH_KEY`
 - `DEPLOY_KNOWN_HOSTS`
 
-Configure Environment variable `DEPLOY_PATH` under `/opt` or `/srv`. Keep `DEPLOY_ENABLED` unset during initial setup and enable it only after environment protection rules and the remote `.env` are ready.
+Configure Environment variable `DEPLOY_PATH` as exactly `/opt/codex-usage-dashboard` or `/srv/codex-usage-dashboard`. Keep `DEPLOY_ENABLED` unset during initial setup and enable it only after environment protection rules and the remote `.env` are ready.
+
+For an independent deployment that imports selected history from an existing installation, follow the [legacy data migration runbook](docs/legacy-data-migration.md). It keeps non-Codex history out of the new database and leaves the source database unchanged.
 
 ## Privacy and security
 

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+# shellcheck source=scripts/lib/deploy-guards.sh
+source "$repo_root/scripts/lib/deploy-guards.sh"
+
 if [[ $# -ne 2 ]]; then
   echo "Usage: scripts/deploy.sh user@host /opt/codex-usage-dashboard" >&2
   echo "Optional: DEPLOY_SSH_KEY=./ssh_key scripts/deploy.sh user@host /opt/codex-usage-dashboard" >&2
@@ -9,6 +13,12 @@ fi
 
 remote_host="$1"
 deploy_path="${2%/}"
+validate_deploy_path "$deploy_path"
+
+if [[ "${CODEX_USAGE_DASHBOARD_DEPLOY_VALIDATE_ONLY:-}" == "1" ]]; then
+  exit 0
+fi
+
 compose_file="deploy/docker-compose.yml"
 quoted_deploy_path="$(printf "%q" "$deploy_path")"
 ssh_transport="ssh"

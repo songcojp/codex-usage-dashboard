@@ -1,0 +1,33 @@
+name: ${MIGRATION_TEST_PROJECT:?MIGRATION_TEST_PROJECT is required}
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: migration_test
+      POSTGRES_USER: migration_test
+      POSTGRES_PASSWORD: migration_test_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U migration_test -d migration_test"]
+      interval: 1s
+      timeout: 2s
+      retries: 30
+
+  server:
+    image: node:20-alpine
+    command:
+      - node
+      - -e
+      - >-
+        require('node:http').createServer((request, response) => {
+          response.writeHead(request.url === '/api/health' ? 200 : 404);
+          response.end();
+        }).listen(3000)
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
