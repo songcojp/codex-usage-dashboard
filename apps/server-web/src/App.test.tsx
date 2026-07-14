@@ -109,7 +109,7 @@ describe("admin dashboard rendering", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
     await screen.findByRole("heading", { name: "Codex Usage Dashboard" });
-    expect(screen.queryAllByText("Codex Usage")).toHaveLength(0);
+    expect(screen.getByLabelText("Codex Usage Dashboard").textContent).toContain("Codex Usage");
     expect(screen.getByLabelText("Current UTC time").textContent).toMatch(
       /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC$/
     );
@@ -145,7 +145,7 @@ describe("admin dashboard rendering", () => {
     expect(screen.getByText("84")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("tab", { name: "Prices" }));
-    expect(screen.getByText("Model prices")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Model prices" })).toBeTruthy();
     expect(screen.getByDisplayValue("gpt-5")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Input USD / 1M"), {
       target: { value: "3" }

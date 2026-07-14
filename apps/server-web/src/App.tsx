@@ -34,33 +34,19 @@ import {
   type UsageEvent,
   type UsageFilters
 } from "./api.js";
+import { AppShell } from "./components/AppShell.js";
+import type {
+  DashboardSection,
+  DashboardTab as Tab,
+  EventSort,
+  Language,
+  LanguageSetting,
+  PriceDraft,
+  ProjectSort,
+  Theme
+} from "./dashboard-types.js";
 
 type AuthState = "checking" | "authenticated" | "anonymous";
-type Tab = "events" | "devices" | "projects" | "prices";
-type Language = "zh" | "ja" | "en" | "ko";
-type LanguageSetting = "auto" | Language;
-type EventSort =
-  | "occurredAt-desc"
-  | "occurredAt-asc"
-  | "totalTokens-desc"
-  | "totalTokens-asc"
-  | "costUsd-desc"
-  | "costUsd-asc"
-  | "inputTokens-desc"
-  | "inputTokens-asc"
-  | "outputTokens-desc"
-  | "outputTokens-asc"
-  | "cacheTokens-desc"
-  | "cacheTokens-asc";
-type ProjectSort =
-  | "updatedAt-desc"
-  | "updatedAt-asc"
-  | "eventCount-desc"
-  | "eventCount-asc"
-  | "totalTokens-desc"
-  | "totalTokens-asc"
-  | "costUsd-desc"
-  | "costUsd-asc";
 
 const eventPageLimit = 25;
 const emptyPriceDraft: PriceDraft = {
@@ -433,6 +419,7 @@ export function App() {
   const [filters, setFilters] = useState<UsageFilters>(() => defaultFilters());
   const [data, setData] = useState<DashboardData | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("events");
+  const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
   const [eventOffset, setEventOffset] = useState(0);
   const [eventSort, setEventSort] = useState<EventSort>("occurredAt-desc");
   const [projectSort, setProjectSort] = useState<ProjectSort>("updatedAt-desc");
@@ -440,7 +427,7 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [theme, setTheme] = useState<"light" | "dark">(() => {
+  const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window !== "undefined") {
       const stored = window.localStorage.getItem("codex-dashboard-theme");
       if (stored === "light" || stored === "dark") return stored;
@@ -452,6 +439,9 @@ export function App() {
   });
   const [trendMode, setTrendMode] = useState<"daily" | "cumulative">("daily");
   const [trendFilter, setTrendFilter] = useState<"all" | "cost" | "tokens">("all");
+  const overviewRef = useRef<HTMLElement>(null);
+  const trendRef = useRef<HTMLElement>(null);
+  const explorerRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -473,6 +463,22 @@ export function App() {
     setLanguageSetting(nextSetting);
     writeStoredLanguageSetting(nextSetting);
   }, []);
+
+  const handleNavigate = useCallback((section: DashboardSection) => {
+    setActiveSection(section);
+    const target = {
+      overview: overviewRef.current,
+      trend: trendRef.current,
+      explorer: explorerRef.current
+    }[section];
+    target?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    target?.focus({ preventScroll: true });
+  }, []);
+
+  const handleOpenPrices = useCallback(() => {
+    setActiveTab("prices");
+    handleNavigate("explorer");
+  }, [handleNavigate]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setUtcNow(new Date()), 1000);
@@ -635,50 +641,21 @@ export function App() {
   }
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div>
-          <p className="utc-clock" aria-label={t("Current UTC time")}>
-            {formatUtcClock(utcNow)}
-          </p>
-          <h1>{t("Codex Usage Dashboard")}</h1>
-        </div>
-        <div className="topbar-actions">
-          <LanguageSelect value={languageSetting} onChange={handleLanguageChange} t={t} />
-          <button
-            type="button"
-            className="theme-toggle-button"
-            onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
-            aria-label="Toggle Theme"
-          >
-            {theme === "light" ? (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-              </svg>
-            ) : (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="5"></circle>
-                <line x1="12" y1="1" x2="12" y2="3"></line>
-                <line x1="12" y1="21" x2="12" y2="23"></line>
-                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                <line x1="1" y1="12" x2="3" y2="12"></line>
-                <line x1="21" y1="12" x2="23" y2="12"></line>
-                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-              </svg>
-            )}
-          </button>
-          <span className="admin-chip">{adminEmail}</span>
-          <button type="button" className="secondary-button" onClick={handleLogout} disabled={loading}>
-            {t("Logout")}
-          </button>
-          <button type="button" className="primary-button" onClick={refresh} disabled={loading}>
-            {loading ? t("Refreshing...") : t("Refresh")}
-          </button>
-        </div>
-      </header>
-
+    <AppShell
+      activeSection={activeSection}
+      adminEmail={adminEmail}
+      currentTimeLabel={formatUtcClock(utcNow)}
+      languageSetting={languageSetting}
+      loading={loading}
+      onLanguageChange={handleLanguageChange}
+      onLogout={handleLogout}
+      onNavigate={handleNavigate}
+      onOpenPrices={handleOpenPrices}
+      onRefresh={refresh}
+      onThemeToggle={() => setTheme((current) => (current === "light" ? "dark" : "light"))}
+      t={t}
+      theme={theme}
+    >
       <section className="filter-bar" aria-label={t("Dashboard filters")}>
         <label>
           {t("From")}
@@ -773,7 +750,13 @@ export function App() {
 
       {error ? <div className="error-banner">{error}</div> : null}
 
-      <section className="metrics-grid" aria-label="Token metrics">
+      <section
+        className="metrics-grid"
+        aria-label="Token metrics"
+        id="dashboard-overview"
+        ref={overviewRef}
+        tabIndex={-1}
+      >
         <MetricCard label={t("Total tokens")} value={data?.summary.totalTokens} loading={loading && !data} />
         <MetricCard label={t("Cache read")} value={data?.summary.cacheReadTokens} loading={loading && !data} />
         <MetricCard label={t("Input")} value={data?.summary.inputTokens} loading={loading && !data} />
@@ -786,7 +769,7 @@ export function App() {
         />
       </section>
 
-      <section className="panel chart-panel">
+      <section className="panel chart-panel" id="dashboard-trend" ref={trendRef} tabIndex={-1}>
         <div className="chart-header-row">
           <PanelHeader title={t("Usage trend")} meta={`${filters.from} to ${filters.to} (${filters.timeZone})`} />
           <div className="chart-controls">
@@ -842,7 +825,7 @@ export function App() {
         />
       </section>
 
-      <section className="panel">
+      <section className="panel" id="dashboard-explorer" ref={explorerRef} tabIndex={-1}>
         <div className="tab-row" role="tablist" aria-label={t("Details")}>
           <TabButton active={activeTab === "events"} onClick={() => setActiveTab("events")}>
             {t("Events")}
@@ -890,7 +873,7 @@ export function App() {
           />
         ) : null}
       </section>
-    </main>
+    </AppShell>
   );
 }
 
@@ -1582,14 +1565,6 @@ function ProjectsTable({
     </>
   );
 }
-
-type PriceDraft = {
-  model: string;
-  inputCostPerMillionUsd: string;
-  outputCostPerMillionUsd: string;
-  cacheReadCostPerMillionUsd: string;
-  cacheWriteCostPerMillionUsd: string;
-};
 
 function PricesPanel({
   rows,
