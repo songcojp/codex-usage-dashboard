@@ -1,130 +1,117 @@
 #!/usr/bin/env node
 import fs from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { Command } from "commander";
-import {
-  configPath,
-  queuePathForConfig,
-  readAgentConfig,
-  readAgentState,
-  statePathForConfig
-} from "./config.js";
-import { resetScanUploadState, scanConfiguredSources, uploadQueuedEvents } from "./runtime.js";
-import { resolveSchedulerScriptPath } from "./scheduler/resolve.js";
-import { type SchedulerInterval, systemdUnitFiles } from "./scheduler/systemd.js";
-import { windowsHiddenRunnerScript, windowsTaskCommand } from "./scheduler/windows.js";
-import { watchConfiguredSources } from "./watcher.js";
+import { configPath, queuePathForConfig, readAgentConfig, statePathForConfig } from "./config.js";
+import { acquireProcessLock } from "./process-lock.js";
+import { DurableQueue } from "./queue.js";
+import { initialAgentState, readAgentState, writeAgentState } from "./state.js";
+import { runWatcher } from "./watcher.js";
 
-const program = new Command();
+export function createProgram(): Command {
+  const program = new Command().name("codex-usage-dashboard-agent");
 
-program.name("codex-usage-dashboard-agent");
-
-program.command("init").action(() => {
-  console.log(`config: ${configPath()}`);
-});
-
-program
-  .command("scan")
-  .option("--upload", "upload after scan")
-  .action(async (options: { upload?: boolean }) => {
+  program.command("watch").action(async () => {
     const activeConfigPath = configPath();
+    const configDir = path.dirname(activeConfigPath);
     const config = await readAgentConfig(activeConfigPath);
-    const queuePath = queuePathForConfig(activeConfigPath);
-    const scan = await scanConfiguredSources({
-      config,
-      queuePath,
-      statePath: statePathForConfig(activeConfigPath)
-    });
-
-    if (!options.upload) {
-      console.log(JSON.stringify({ ...scan, upload: false }));
-      return;
-    }
-
-    const upload = await uploadQueuedEvents({ config, queuePath });
-    console.log(JSON.stringify({ ...scan, upload }));
-  });
-
-program.command("upload").action(async () => {
-  const activeConfigPath = configPath();
-  const config = await readAgentConfig(activeConfigPath);
-  const upload = await uploadQueuedEvents({ config, queuePath: queuePathForConfig(activeConfigPath) });
-  console.log(JSON.stringify(upload));
-});
-
-program
-  .command("watch")
-  .option("--upload", "upload after each incremental scan")
-  .action(async (options: { upload?: boolean }) => {
-    const activeConfigPath = configPath();
-    const config = await readAgentConfig(activeConfigPath);
-    await watchConfiguredSources({
-      config,
-      queuePath: queuePathForConfig(activeConfigPath),
-      statePath: statePathForConfig(activeConfigPath),
-      upload: Boolean(options.upload),
-      onRun: (result) => console.log(JSON.stringify(result)),
-      onError: (error) => console.error(error instanceof Error ? error.message : String(error))
-    });
-  });
-
-program.command("reset-state").action(async () => {
-  const activeConfigPath = configPath();
-  const result = await resetScanUploadState({
-    queuePath: queuePathForConfig(activeConfigPath),
-    statePath: statePathForConfig(activeConfigPath)
-  });
-  console.log(JSON.stringify(result));
-});
-
-program
-  .command("install-scheduler")
-  .option("--interval <interval>", "Scheduler interval: daily or hourly")
-  .action(async (options: { interval?: string }) => {
-    let scriptPath: string;
-
+    const controller = new AbortController();
+    const stop = () => controller.abort();
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
     try {
-      scriptPath = resolveSchedulerScriptPath(process.argv[1] ?? "codex-usage-dashboard-agent");
+      const queue = await DurableQueue.open({
+        queuePath: queuePathForConfig(activeConfigPath),
+        deadLetterPath: path.join(configDir, "dead-letter.jsonl")
+      });
+      await runWatcher({
+        config,
+        configDir,
+        statePath: statePathForConfig(activeConfigPath),
+        queue,
+        signal: controller.signal,
+        onCycle: (result) => console.log(JSON.stringify(result)),
+        onError: (category) => console.error(JSON.stringify({ category }))
+      });
     } catch (error) {
-      console.error(error instanceof Error ? error.message : String(error));
-      process.exitCode = 1;
-      return;
+      if (!controller.signal.aborted) throw error;
+    } finally {
+      process.off("SIGINT", stop);
+      process.off("SIGTERM", stop);
     }
-
-    const target = {
-      nodePath: process.execPath,
-      scriptPath,
-      hiddenRunnerPath: path.join(path.dirname(configPath()), "run-hidden.vbs"),
-    };
-
-    const interval: SchedulerInterval = options.interval === "daily" ? "daily" : "hourly";
-
-    if (process.platform === "win32") {
-      await fs.mkdir(path.dirname(target.hiddenRunnerPath), { recursive: true });
-      await fs.writeFile(target.hiddenRunnerPath, windowsHiddenRunnerScript, "utf8");
-      console.log(windowsTaskCommand(target, interval));
-      return;
-    }
-
-    const files = systemdUnitFiles(target, interval);
-    console.log(`# codex-usage-dashboard-agent.service\n${files.service}`);
-    if (files.timer) {
-      console.log(`# codex-usage-dashboard-agent.timer\n${files.timer}`);
-    }
-    console.log(`# codex-usage-dashboard-agent-watch.service\n${files.watchService}`);
   });
 
-program.command("status").action(async () => {
-  const activeConfigPath = configPath();
-  const state = await readAgentState(statePathForConfig(activeConfigPath));
-  console.log(
-    JSON.stringify({
-      ok: true,
-      configPath: activeConfigPath,
-      lastScanAt: state.lastScanAt,
-      trackedFiles: Object.keys(state.fileFingerprints).length
-    })
-  );
-});
+  program.command("status").action(async () => {
+    console.log(JSON.stringify(await readAgentStatus(statePathForConfig(configPath()))));
+  });
 
-await program.parseAsync();
+  program.command("reset-state").option("--confirm", "archive and reset cursor state").action(
+    async (options: { confirm?: boolean }) => {
+      const activeConfigPath = configPath();
+      console.log(JSON.stringify(await resetAgentState({
+        configDir: path.dirname(activeConfigPath),
+        statePath: statePathForConfig(activeConfigPath),
+        confirm: Boolean(options.confirm)
+      })));
+    }
+  );
+
+  return program;
+}
+
+export async function readAgentStatus(statePath: string): Promise<{
+  ok: true;
+  stateVersion: 2;
+  lastSourceAdvanceAt: string | null;
+  lastUploadAt: string | null;
+  lastReconciliationAt: string | null;
+  trackedFiles: number;
+  queueDepth: number;
+  lastErrorCategory: string | null;
+}> {
+  const state = await readAgentState(statePath);
+  return {
+    ok: true,
+    stateVersion: 2,
+    lastSourceAdvanceAt: state.lastSourceAdvanceAt,
+    lastUploadAt: state.lastUploadAt,
+    lastReconciliationAt: state.lastReconciliationAt,
+    trackedFiles: Object.keys(state.files).length,
+    queueDepth: state.queueDepth,
+    lastErrorCategory: state.lastErrorCategory
+  };
+}
+
+export async function resetAgentState(input: {
+  configDir: string;
+  statePath: string;
+  confirm: boolean;
+  now?: () => Date;
+}): Promise<{ reset: true; archivePath: string | null }> {
+  if (!input.confirm) throw new Error("reset-state requires --confirm");
+  const lock = await acquireProcessLock(input.configDir);
+  try {
+    let archivePath: string | null = null;
+    try {
+      const timestamp = (input.now ?? (() => new Date()))().toISOString().replace(/[:.]/g, "-");
+      archivePath = path.join(path.dirname(input.statePath), `state.${timestamp}.bak`);
+      await fs.rename(input.statePath, archivePath);
+      await fs.chmod(archivePath, 0o600);
+    } catch (error) {
+      if (!isMissing(error)) throw error;
+    }
+    await writeAgentState(initialAgentState(), input.statePath);
+    return { reset: true, archivePath };
+  } finally {
+    await lock.release();
+  }
+}
+
+function isMissing(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "code" in error && error.code === "ENOENT");
+}
+
+if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
+  await createProgram().parseAsync();
+}

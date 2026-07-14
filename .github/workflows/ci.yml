@@ -30,3 +30,23 @@ jobs:
       - name: Test isolated database migration
         if: matrix.node-version == '22.13.0'
         run: scripts/test-legacy-migration-e2e.sh
+
+  verify-windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.19.0"
+      - name: Validate with Windows PowerShell 5.1
+        shell: powershell
+        env:
+          CODEX_USAGE_DASHBOARD_DEVICE_TOKEN: public-ci-placeholder
+        run: |
+          $env:APPDATA = Join-Path $env:RUNNER_TEMP "codex-usage-dashboard-agent-test"
+          .\scripts\install-agent-windows.ps1 `
+            -ServerUrl "https://dashboard.example.test" `
+            -DeviceName "CI" `
+            -ValidateOnly
+      - name: Run installer tests
+        run: node --test scripts/install-agent.test.mjs

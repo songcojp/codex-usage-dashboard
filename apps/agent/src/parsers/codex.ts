@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import { sha256Hex, usageEventDraftSchema, type ToolSlug, type UsageEventDraft } from "@codex-usage-dashboard/shared";
 import { identityFromCwd } from "../project.js";
+import type { ParseLineInput, ParseLineResult } from "./types.js";
 
 type CodexUsageRecord = {
   timestamp?: unknown;
@@ -21,93 +22,109 @@ type CodexSessionRecord = {
   payload?: unknown;
 };
 
+export type CodexParserContext = {
+  sessionId: string | null;
+  cwd: string | null;
+  model: string | null;
+  toolSlug: Extract<ToolSlug, "codex-vscode-plugin" | "codex-desktop" | "codex-cli" | "other">;
+};
+
+export function initialCodexContext(): CodexParserContext {
+  return { sessionId: null, cwd: null, model: null, toolSlug: "other" };
+}
+
 export async function parseCodexFile(filePath: string): Promise<UsageEventDraft[]> {
   const contents = await fs.readFile(filePath, "utf8");
   const events: UsageEventDraft[] = [];
-  let sessionId: string | null = null;
-  let cwd: string | null = null;
-  let model: string | null = null;
-  let toolSlug: Extract<ToolSlug, "codex-vscode-plugin" | "codex-desktop" | "codex-cli" | "other"> = "other";
+  let context = initialCodexContext();
 
   for (const [index, line] of contents.split(/\r?\n/).entries()) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      continue;
-    }
+    const result = await parseCodexLine({ line, lineNumber: index + 1, context, sourceIdentity: "", filePath, finalTail: false });
+    context = result.context;
+    if (result.malformed) throw new Error(`Codex record ${index + 1} invalid`);
+    if (result.event) events.push(result.event);
+  }
 
-    let record: CodexUsageRecord;
-    try {
-      record = JSON.parse(trimmed) as CodexUsageRecord;
-    } catch (error) {
-      continue;
-    }
+  return events;
+}
 
+export async function parseCodexLine(
+  input: ParseLineInput<CodexParserContext>
+): Promise<ParseLineResult<CodexParserContext>> {
+  const trimmed = input.line.trim();
+  if (!trimmed) return { context: input.context };
+
+  let record: CodexUsageRecord;
+  try {
+    record = JSON.parse(trimmed) as CodexUsageRecord;
+  } catch {
+    return input.finalTail
+      ? { context: input.context, malformed: { category: "codex-final-tail-invalid", sourceHash: sha256Hex(input.line) } }
+      : { context: input.context };
+  }
+
+  try {
     if (isLegacyUsageRecord(record)) {
-      events.push(await parseLegacyUsageRecord(record, index + 1));
-      continue;
+      return { context: input.context, event: await parseLegacyUsageRecord(record, input.lineNumber) };
     }
 
     const sessionRecord = record as CodexSessionRecord;
     const payload = objectValue(sessionRecord.payload);
-
     if (sessionRecord.type === "session_meta") {
-      sessionId = optionalString(payload?.id) ?? sessionId;
-      cwd = optionalString(payload?.cwd) ?? cwd;
-      toolSlug = classifyCodexSessionTool(payload) ?? toolSlug;
-      continue;
+      return {
+        context: {
+          ...input.context,
+          sessionId: optionalString(payload?.id) ?? input.context.sessionId,
+          cwd: optionalString(payload?.cwd) ?? input.context.cwd,
+          toolSlug: classifyCodexSessionTool(payload)
+        }
+      };
     }
-
     if (sessionRecord.type === "turn_context") {
-      cwd = optionalString(payload?.cwd) ?? cwd;
-      model = optionalString(payload?.model) ?? model;
-      continue;
+      return {
+        context: {
+          ...input.context,
+          cwd: optionalString(payload?.cwd) ?? input.context.cwd,
+          model: optionalString(payload?.model) ?? input.context.model
+        }
+      };
     }
-
     if (sessionRecord.type !== "event_msg" || payload?.type !== "token_count") {
-      continue;
+      return { context: input.context };
     }
+    const usage = objectValue(objectValue(payload.info)?.last_token_usage);
+    if (!usage) return { context: input.context };
 
-    const info = objectValue(payload.info);
-    const usage = objectValue(info?.last_token_usage);
-    if (!usage) {
-      continue;
-    }
-
-    const activeCwd = requiredString(cwd, `Codex record ${index + 1} cwd`);
-    const occurredAt = requiredString(sessionRecord.timestamp, `Codex record ${index + 1} timestamp`);
-    const rawInputTokens = tokenCount(usage.input_tokens, `Codex record ${index + 1} input_tokens`);
-    const cacheReadTokens = tokenCount(
-      usage.cached_input_tokens,
-      `Codex record ${index + 1} cached_input_tokens`
-    );
+    const activeCwd = requiredString(input.context.cwd, `Codex record ${input.lineNumber} cwd`);
+    const occurredAt = requiredString(sessionRecord.timestamp, `Codex record ${input.lineNumber} timestamp`);
+    const rawInputTokens = tokenCount(usage.input_tokens, `Codex record ${input.lineNumber} input_tokens`);
+    const cacheReadTokens = tokenCount(usage.cached_input_tokens, `Codex record ${input.lineNumber} cached_input_tokens`);
     const inputTokens = Math.max(0, rawInputTokens - cacheReadTokens);
-    const outputTokens = tokenCount(usage.output_tokens, `Codex record ${index + 1} output_tokens`);
-    const cacheWriteTokens = 0;
-    const sourceIdBasis = `${toolSlug}:${occurredAt}:${sessionId ?? ""}:${index + 1}`;
-
-    events.push(
-      usageEventDraftSchema.parse({
+    const outputTokens = tokenCount(usage.output_tokens, `Codex record ${input.lineNumber} output_tokens`);
+    const sourceIdBasis = `${input.context.toolSlug}:${occurredAt}:${input.context.sessionId ?? ""}:${input.lineNumber}`;
+    return {
+      context: input.context,
+      event: usageEventDraftSchema.parse({
         sourceEventId: sha256Hex(sourceIdBasis),
-        toolSlug,
+        toolSlug: input.context.toolSlug,
         occurredAt,
         project: await identityFromCwd({ cwd: activeCwd }),
-        model,
+        model: input.context.model,
         inputTokens,
         outputTokens,
         cacheReadTokens,
-        cacheWriteTokens,
-        totalTokens: inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens,
+        cacheWriteTokens: 0,
+        totalTokens: inputTokens + outputTokens + cacheReadTokens,
         costUsd: null,
-        metadata: {
-          sourceType: "codex-session-token-count",
-          sourceRecordHash: sha256Hex(sourceIdBasis),
-          lineNumber: index + 1
-        }
+        metadata: { sourceType: "codex-session-token-count", sourceRecordHash: sha256Hex(sourceIdBasis), lineNumber: input.lineNumber }
       })
-    );
+    };
+  } catch {
+    return {
+      context: input.context,
+      malformed: { category: "codex-token-record-invalid", sourceHash: sha256Hex(input.line) }
+    };
   }
-
-  return events;
 }
 
 function classifyCodexSessionTool(

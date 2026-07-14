@@ -37,7 +37,9 @@ scripts/install-agent.sh \
 
 On Linux, Codex CLI sessions are normally below `$HOME/.codex/sessions`. VS Code extension logs are normally below `$HOME/.config/Code/logs` on Linux and `%APPDATA%\Code\logs` on Windows. Configure only paths that exist on your workstation. Session metadata distinguishes CLI, VS Code, Desktop, and unknown (`other`) events.
 
-The real Linux installation writes mode-`0600` configuration below `~/.config/codex-usage-dashboard-agent/`. Use `--windows-task` to print Windows setup commands.
+The real Linux installation writes mode-`0600` configuration below `~/.config/codex-usage-dashboard-agent/` and installs one supervised watcher service. It requires systemd user lingering so the watcher survives logout; enable it with `loginctl enable-linger "$USER"`, or explicitly accept session-only operation with `--allow-session-only`. Existing queue data is preserved, the previous installation is backed up, and a failed health check restores the prior service state. On Windows, run `scripts/install-agent-windows.ps1` from PowerShell with the same token environment variable, `-ServerUrl`, `-DeviceName`, and repeated `-ToolPath` values. The PowerShell installer backs up prior tasks and state, verifies the replacement for 30 seconds, then removes the obsolete scan task; failure restores the prior tasks. Use `--windows-task` only to preview the single watcher task XML.
+
+The watcher ingests appended bytes immediately and performs a full reconciliation inside the same process every six hours. It uses crash-safe per-file cursors and a durable queue capped at 100 MiB. The only automatic unit is `codex-usage-dashboard-agent.service`; installation disables and removes the obsolete `codex-usage-dashboard-agent.timer` and `codex-usage-dashboard-agent-watch.service`. Diagnostic commands are `status` and `reset-state --confirm`; resetting state archives cursors but does not delete the queue or dead-letter file.
 
 ## Docker and HTTPS
 

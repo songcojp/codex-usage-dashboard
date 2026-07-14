@@ -9,7 +9,7 @@ async function tempDir(): Promise<string> {
 }
 
 describe("agent config", () => {
-  it("defaults scan interval to hourly", async () => {
+  it("loads watcher configuration without a scan interval", async () => {
     const dir = await tempDir();
     const configPath = path.join(dir, "config.json");
     await fs.writeFile(
@@ -22,9 +22,14 @@ describe("agent config", () => {
       "utf8"
     );
 
-    await expect(readAgentConfig(configPath)).resolves.toMatchObject({
-      scanInterval: "hourly"
+    const config = await readAgentConfig(configPath);
+    expect(config).toEqual({
+      serverUrl: "https://example.test",
+      deviceToken: "device-token",
+      deviceName: "workstation",
+      toolPaths: {}
     });
+    expect(config).not.toHaveProperty("scanInterval");
   });
 
   it("stores state next to the config file", () => {
