@@ -6,7 +6,6 @@ export type AgentConfig = {
   serverUrl: string;
   deviceToken: string;
   deviceName: string;
-  scanInterval: "daily" | "hourly";
   toolPaths: Record<string, string[]>;
 };
 
@@ -52,7 +51,6 @@ export async function readAgentConfig(filePath = configPath()): Promise<AgentCon
     serverUrl: parsed.serverUrl,
     deviceToken: parsed.deviceToken,
     deviceName: parsed.deviceName,
-    scanInterval: parsed.scanInterval === "daily" ? "daily" : "hourly",
     toolPaths
   };
 }
