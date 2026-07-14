@@ -30,6 +30,15 @@ describe("acknowledgement validation", () => {
   it("rejects malformed success bodies", () => {
     expect(() => validateAcknowledgement([event("a")], { accepted: true })).toThrow(/invalid acknowledgement/);
   });
+
+  it("does not retain path-like server reasons", () => {
+    const result = validateAcknowledgement([event("a")], {
+      inserted: 0,
+      duplicates: 0,
+      rejected: [{ sourceEventId: "a", reason: "/home/person/private/token" }]
+    });
+    expect(result.rejected[0]?.reason).toBe("server-rejected");
+  });
 });
 
 function event(sourceEventId: string): UsageEventDraft {

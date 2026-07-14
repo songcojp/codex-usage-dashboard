@@ -61,6 +61,8 @@ function isCount(value: unknown): value is number {
 }
 
 function sanitizeReason(reason: string): string {
-  const sanitized = reason.replace(/[^a-zA-Z0-9 _.:/-]/g, "?").slice(0, 200).trim();
-  return sanitized || "rejected";
+  const code = reason.trim().toLowerCase().replace(/ +/g, "-");
+  return new Set(["invalid", "invalid-model", "invalid-event", "unsupported-tool", "duplicate"]).has(code)
+    ? code
+    : "server-rejected";
 }

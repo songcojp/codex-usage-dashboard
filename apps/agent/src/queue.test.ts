@@ -62,7 +62,7 @@ describe("queue", () => {
 
     expect((await queue.peek(500)).map(({ sourceEventId }) => sourceEventId)).toEqual(["remaining"]);
     const deadLetters = (await fs.readFile(paths.deadLetterPath, "utf8")).trim().split("\n").map(JSON.parse);
-    expect(deadLetters).toMatchObject([{ sourceEventId: "rejected", reason: "invalid model" }]);
+    expect(deadLetters).toMatchObject([{ sourceEventId: "rejected", reason: "invalid-model" }]);
 
     await queue.enqueue([draft("rejected")]);
     await queue.acknowledge(await queue.peek(500), {

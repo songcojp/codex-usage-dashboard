@@ -5,8 +5,42 @@ import { describe, expect, it } from "vitest";
 import { DurableQueue } from "./queue.js";
 import { initialAgentState, readAgentState, writeAgentState } from "./state.js";
 import { runWatcherCycle } from "./watcher.js";
+import type { UsageEventDraft } from "@codex-usage-dashboard/shared";
 
 describe("watcher integration", () => {
+  it("does not bypass a future upload retry deadline", async () => {
+    const fixture = await watcherFixture();
+    await fixture.queue.enqueue([queuedEvent("cooldown")]);
+    let requests = 0;
+    const result = await runWatcherCycle({
+      config: fixture.config,
+      statePath: fixture.statePath,
+      queue: fixture.queue,
+      reason: "filesystem",
+      nextRetryAt: "2026-07-14T00:30:00.000Z",
+      now: () => new Date("2026-07-14T00:00:00.000Z"),
+      fetchImpl: async () => { requests += 1; return new Response(); }
+    });
+    expect(result).toMatchObject({ uploadAttempted: false });
+    expect(requests).toBe(0);
+    expect(fixture.queue.depth).toBe(1);
+  });
+
+  it("retains startup queue data and persists an error when the network is down", async () => {
+    const fixture = await watcherFixture();
+    await fixture.queue.enqueue([queuedEvent("outage")]);
+    const result = await runWatcherCycle({
+      config: fixture.config,
+      statePath: fixture.statePath,
+      queue: fixture.queue,
+      reason: "startup",
+      fetchImpl: async () => { throw new Error("private network detail"); }
+    });
+    expect(result).toMatchObject({ uploadAttempted: true, errorCategory: "upload-failed" });
+    expect(fixture.queue.depth).toBe(1);
+    expect((await readAgentState(fixture.statePath)).lastErrorCategory).toBe("upload-failed");
+  });
+
   it("delivers an unterminated record once after its file rotates", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-watcher-tail-"));
     const root = path.join(dir, "sessions");
@@ -74,3 +108,31 @@ describe("watcher integration", () => {
     expect(state.lastReconciliationAt).not.toBeNull();
   });
 });
+
+async function watcherFixture() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-watcher-retry-"));
+  const statePath = path.join(dir, "state.json");
+  await writeAgentState(initialAgentState(), statePath);
+  return {
+    statePath,
+    queue: await DurableQueue.open({ queuePath: path.join(dir, "queue.jsonl"), deadLetterPath: path.join(dir, "dead.jsonl") }),
+    config: { serverUrl: "https://example.test", deviceToken: "token", deviceName: "device", toolPaths: {} }
+  };
+}
+
+function queuedEvent(sourceEventId: string): UsageEventDraft {
+  return {
+    sourceEventId,
+    toolSlug: "codex-cli",
+    occurredAt: "2026-07-14T00:00:00.000Z",
+    project: { displayName: "project", repoHash: "a".repeat(64), remoteHash: null, pathHash: "b".repeat(64) },
+    model: null,
+    inputTokens: 1,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    totalTokens: 1,
+    costUsd: null,
+    metadata: {}
+  };
+}

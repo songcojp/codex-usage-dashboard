@@ -82,7 +82,9 @@ export async function runWatcher(input: {
     retryTimer = setTimeout(() => void scheduler.trigger("retry").catch(reportError), delayMs);
   };
   const reportError = (error: unknown) => {
-    input.onError?.(errorCategory(error));
+    const category = errorCategory(error);
+    input.onError?.(category);
+    void persistErrorCategory(input.statePath, category);
     scheduleRetry(retry.nextDelay());
   };
   const refreshWatches = async () => {
@@ -105,7 +107,9 @@ export async function runWatcher(input: {
   };
   const scheduler = new SerializedCycleScheduler(async (reason) => {
     const result = await runWatcherCycle({ ...input, reason, nextRetryAt });
-    if (result.uploadStatus === null || (result.uploadStatus >= 200 && result.uploadStatus < 300)) {
+    if (!result.uploadAttempted) {
+      // Preserve the current retry deadline while source-only work continues.
+    } else if (!result.errorCategory && result.uploadStatus !== null && result.uploadStatus >= 200 && result.uploadStatus < 300) {
       retry.reset();
       nextRetryAt = null;
       if (retryTimer) clearTimeout(retryTimer);
@@ -151,21 +155,23 @@ export async function runWatcherCycle(input: {
   reason: WatcherCycleReason;
   nextRetryAt?: string | null;
   fetchImpl?: typeof fetch;
-}): Promise<{ filesAdvanced: number; eventsQueued: number; eventsUploaded: number; uploadStatus: number | null }> {
+  now?: () => Date;
+}): Promise<{ filesAdvanced: number; eventsQueued: number; eventsUploaded: number; uploadStatus: number | null; uploadAttempted: boolean; errorCategory: string | null }> {
   let filesAdvanced = 0;
   let eventsQueued = 0;
   let eventsUploaded = 0;
   let uploadStatus: number | null = null;
-
-  const before = await drainUploadQueue({
-    queue: input.queue,
-    config: input.config,
-    statePath: input.statePath,
-    fetchImpl: input.fetchImpl
-  });
+  let uploadAttempted = false;
+  let uploadErrorCategory: string | null = null;
+  const now = input.now ?? (() => new Date());
+  const retryDue = !input.nextRetryAt || now().getTime() >= Date.parse(input.nextRetryAt) || input.reason === "retry";
+  const before = retryDue ? await attemptQueueDrain(input) : emptyDrain(input.queue.depth);
   eventsUploaded += before.uploaded;
   uploadStatus = before.status;
-  let uploadBlocked = before.status !== null && (before.status < 200 || before.status >= 300);
+  uploadAttempted ||= before.attempted;
+  uploadErrorCategory = before.errorCategory;
+  let uploadBlocked = !retryDue || before.errorCategory !== null ||
+    (before.status !== null && (before.status < 200 || before.status >= 300));
 
   const observedIdentities = new Set<string>();
   for (const adapter of parserAdapters) {
@@ -219,15 +225,13 @@ export async function runWatcherCycle(input: {
           if (processed.advancedLines > 0) fileAdvanced = true;
           eventsQueued += processed.queued;
           if (processed.queued > 0 && !uploadBlocked) {
-            const drained = await drainUploadQueue({
-              queue: input.queue,
-              config: input.config,
-              statePath: input.statePath,
-              fetchImpl: input.fetchImpl
-            });
+            const drained = await attemptQueueDrain(input);
             eventsUploaded += drained.uploaded;
             uploadStatus = drained.status ?? uploadStatus;
-            uploadBlocked = drained.status !== null && (drained.status < 200 || drained.status >= 300);
+            uploadAttempted ||= drained.attempted;
+            uploadErrorCategory = drained.errorCategory ?? uploadErrorCategory;
+            uploadBlocked = drained.errorCategory !== null ||
+              (drained.status !== null && (drained.status < 200 || drained.status >= 300));
           }
           if (processed.remaining === 0 || processed.advancedLines === 0 || input.queue.sizeBytes >= input.queue.maxBytes) break;
         }
@@ -241,22 +245,75 @@ export async function runWatcherCycle(input: {
     state = tombstoneMissingFiles(state, observedIdentities);
   }
   if (input.reason === "startup" || input.reason === "reconciliation") {
-    state.lastReconciliationAt = new Date().toISOString();
+    state.lastReconciliationAt = now().toISOString();
   }
   state.queueDepth = input.queue.depth;
   await writeAgentState(state, input.statePath);
 
   if (!uploadBlocked && input.queue.depth > 0) {
-    const after = await drainUploadQueue({
-      queue: input.queue,
-      config: input.config,
-      statePath: input.statePath,
-      fetchImpl: input.fetchImpl
-    });
+    const after = await attemptQueueDrain(input);
     eventsUploaded += after.uploaded;
     uploadStatus = after.status ?? uploadStatus;
+    uploadAttempted ||= after.attempted;
+    uploadErrorCategory = after.errorCategory ?? uploadErrorCategory;
   }
-  return { filesAdvanced, eventsQueued, eventsUploaded, uploadStatus };
+  const finalState = await readAgentState(input.statePath);
+  finalState.queueDepth = input.queue.depth;
+  const responseError = uploadStatus === 401
+    ? "authentication-failed"
+    : uploadStatus !== null && (uploadStatus < 200 || uploadStatus >= 300)
+      ? "upload-http-failed"
+      : null;
+  if (uploadErrorCategory || responseError) {
+    finalState.lastErrorCategory = uploadErrorCategory ?? responseError;
+    await writeAgentState(finalState, input.statePath);
+  }
+  return {
+    filesAdvanced,
+    eventsQueued,
+    eventsUploaded,
+    uploadStatus,
+    uploadAttempted,
+    errorCategory: uploadErrorCategory ?? responseError
+  };
+}
+
+type DrainAttempt = {
+  uploaded: number;
+  rejected: number;
+  remaining: number;
+  status: number | null;
+  attempted: boolean;
+  errorCategory: string | null;
+};
+
+async function attemptQueueDrain(input: {
+  queue: DurableQueue;
+  config: AgentConfig;
+  statePath: string;
+  fetchImpl?: typeof fetch;
+}): Promise<DrainAttempt> {
+  if (input.queue.depth === 0) return emptyDrain(0);
+  try {
+    const result = await drainUploadQueue(input);
+    return { ...result, attempted: true, errorCategory: null };
+  } catch {
+    return { uploaded: 0, rejected: 0, remaining: input.queue.depth, status: null, attempted: true, errorCategory: "upload-failed" };
+  }
+}
+
+function emptyDrain(remaining: number): DrainAttempt {
+  return { uploaded: 0, rejected: 0, remaining, status: null, attempted: false, errorCategory: null };
+}
+
+async function persistErrorCategory(statePath: string, category: string): Promise<void> {
+  try {
+    const state = await readAgentState(statePath);
+    state.lastErrorCategory = category;
+    await writeAgentState(state, statePath);
+  } catch {
+    // The original cycle error remains the actionable failure.
+  }
 }
 
 function newCursor(
