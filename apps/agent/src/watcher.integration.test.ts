@@ -26,6 +26,34 @@ describe("watcher integration", () => {
     expect(fixture.queue.depth).toBe(1);
   });
 
+  it("does not clear an upload error when sources advance during backoff", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "codex-watcher-backoff-state-"));
+    const source = path.join(dir, "sessions", "session.jsonl");
+    const statePath = path.join(dir, "state.json");
+    await fs.mkdir(path.dirname(source), { recursive: true });
+    await fs.writeFile(source, `${JSON.stringify({
+      timestamp: "2026-07-14T00:00:00.000Z",
+      session_id: "backoff",
+      cwd: "/workspace/project",
+      usage: { input_tokens: 2, output_tokens: 1 }
+    })}\n`);
+    const state = initialAgentState();
+    state.lastErrorCategory = "authentication-failed";
+    await writeAgentState(state, statePath);
+    const queue = await DurableQueue.open({ queuePath: path.join(dir, "queue.jsonl"), deadLetterPath: path.join(dir, "dead.jsonl") });
+    const result = await runWatcherCycle({
+      config: { serverUrl: "https://example.test", deviceToken: "token", deviceName: "device", toolPaths: { "codex-cli": [path.dirname(source)] } },
+      statePath,
+      queue,
+      reason: "filesystem",
+      nextRetryAt: "2026-07-14T00:30:00.000Z",
+      now: () => new Date("2026-07-14T00:00:00.000Z"),
+      fetchImpl: async () => { throw new Error("upload must remain gated"); }
+    });
+    expect(result).toMatchObject({ uploadAttempted: false, filesAdvanced: 1, eventsQueued: 1 });
+    expect((await readAgentState(statePath)).lastErrorCategory).toBe("authentication-failed");
+  });
+
   it("retains startup queue data and persists an error when the network is down", async () => {
     const fixture = await watcherFixture();
     await fixture.queue.enqueue([queuedEvent("outage")]);

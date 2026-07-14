@@ -204,6 +204,10 @@ test("Windows installer backs up, health-checks, removes old scan after health, 
   assert.match(source, /Test-WatcherHealth/);
   assert.match(source, /for \(\$Attempt = 0; \$Attempt -lt 30; \$Attempt\+\+\)/);
   assert.match(source, /watcherStartedAt/);
+  assert.match(source, /encoding="UTF-8"/);
+  assert.match(source, /\[IO\.File\]::Replace\(\$Temp, \$Path, \$null\)/);
+  assert.doesNotMatch(source, /\[IO\.File\]::Move\(\$Temp, \$Path, \$true\)/);
+  assert.match(source, /\$ValidateOnly/);
   assert.ok(source.indexOf("Test-WatcherHealth") < source.lastIndexOf("/Delete /TN $OldTask"));
   assert.match(source, /Restore-PreviousTasks/);
   assert.match(source, /\.recovery/);

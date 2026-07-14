@@ -113,7 +113,7 @@ export async function processSourceFile(input: {
       finalizeAtEof: (input.finalTail ?? tracked.finalizeAtEof ?? false) && acceptedCursor.pendingBase64 !== ""
     };
     state.lastSourceAdvanceAt = (input.now ?? (() => new Date()))().toISOString();
-    state.lastErrorCategory = malformed > 0 ? "malformed-source-record" : null;
+    if (malformed > 0) state.lastErrorCategory = "malformed-source-record";
     state.queueDepth = input.queue.depth;
     await writeAgentState(state, input.statePath);
   }

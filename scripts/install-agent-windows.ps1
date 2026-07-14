@@ -2,7 +2,8 @@
 param(
   [Parameter(Mandatory = $true)][string]$ServerUrl,
   [Parameter(Mandatory = $true)][string]$DeviceName,
-  [string[]]$ToolPath = @()
+  [string[]]$ToolPath = @(),
+  [switch]$ValidateOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -31,7 +32,11 @@ function Write-AtomicUtf8File([string]$Path, [string]$Content) {
     $Stream.Write($Bytes, 0, $Bytes.Length)
     $Stream.Flush($true)
   } finally { $Stream.Dispose() }
-  [IO.File]::Move($Temp, $Path, $true)
+  if ([IO.File]::Exists($Path)) {
+    [IO.File]::Replace($Temp, $Path, $null)
+  } else {
+    [IO.File]::Move($Temp, $Path)
+  }
 }
 
 function Export-TaskIfPresent([string]$Name) {
@@ -43,7 +48,7 @@ function New-WatcherTaskXml {
   $EscapedNode = [Security.SecurityElement]::Escape($NodePath)
   $EscapedCli = [Security.SecurityElement]::Escape($AgentCli)
   return @"
-<?xml version="1.0" encoding="UTF-16"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>
   <Principals><Principal id="Author"><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
@@ -75,6 +80,25 @@ function Restore-PreviousTasks {
     $Saved = Join-Path $BackupDir "$_.xml"
     if (Test-Path $Saved) { & schtasks.exe /Create /TN $_ /XML $Saved /F | Out-Null }
   }
+}
+
+if ($ValidateOnly) {
+  $ValidationDir = Join-Path ([IO.Path]::GetTempPath()) ("codex-usage-dashboard-agent-validation-{0}" -f [guid]::NewGuid().ToString("N"))
+  try {
+    [IO.Directory]::CreateDirectory($ValidationDir) | Out-Null
+    $ValidationConfigPath = Join-Path $ValidationDir "config.json"
+    $ValidationConfig = (@{ serverUrl = $ServerUrl; deviceToken = $Token; deviceName = $DeviceName; toolPaths = @{} } | ConvertTo-Json -Depth 4) + "`n"
+    Write-AtomicUtf8File $ValidationConfigPath $ValidationConfig
+    Write-AtomicUtf8File $ValidationConfigPath $ValidationConfig
+    $ValidationTask = Join-Path $ValidationDir "watcher-task.xml"
+    Write-AtomicUtf8File $ValidationTask (New-WatcherTaskXml)
+    $ParsedTask = [xml](Get-Content -Raw $ValidationTask)
+    if ($ParsedTask.Task.Actions.Exec.Arguments -notmatch "watch") { throw "Watcher task XML validation failed" }
+    Write-Output "Windows installer validation passed"
+  } finally {
+    Remove-Item $ValidationDir -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  return
 }
 
 [IO.Directory]::CreateDirectory($BackupDir) | Out-Null
