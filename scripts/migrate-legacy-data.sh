@@ -172,9 +172,20 @@ container_psql "$target_postgres" -f - < "$repo_root/scripts/sql/legacy-target-p
 
 compose_for "$target_dir" start server >/dev/null
 target_stopped=0
-compose_for "$target_dir" exec -T server node -e \
-  "const response = await fetch('http://localhost:3000/api/health'); if (!response.ok) process.exit(1);" \
-  >/dev/null
+target_healthy=0
+for attempt in $(seq 1 30); do
+  if compose_for "$target_dir" exec -T server node -e \
+    "const response = await fetch('http://localhost:3000/api/health'); if (!response.ok) process.exit(1);" \
+    >/dev/null 2>&1; then
+    target_healthy=1
+    break
+  fi
+  sleep 2
+done
+if [[ "$target_healthy" != "1" ]]; then
+  echo "target health check failed after migration" >&2
+  exit 1
+fi
 
 migration_succeeded=1
 echo "Migration completed and target health check passed."

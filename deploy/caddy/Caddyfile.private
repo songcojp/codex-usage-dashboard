@@ -1,0 +1,8 @@
+{
+  default_sni {$CADDY_DEFAULT_SNI}
+}
+
+{$CADDY_SITE_ADDRESS:https://localhost:8080} {
+  tls internal
+  reverse_proxy server:3000
+}

@@ -34,10 +34,11 @@ services:
     image: caddy:2-alpine
     environment:
       CADDY_SITE_ADDRESS: ${CADDY_SITE_ADDRESS:-:8080}
+      CADDY_DEFAULT_SNI: ${CADDY_DEFAULT_SNI:-}
     ports:
       - "${PUBLIC_BIND_ADDRESS:-127.0.0.1}:${PUBLIC_PORT:-8080}:8080"
     volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${CADDY_CONFIG_FILE:-./caddy/Caddyfile}:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
