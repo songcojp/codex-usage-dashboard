@@ -59,6 +59,7 @@ export function registerReplacement(
 ): AgentStateV2 {
   const next = structuredClone(state);
   const previous = requiredFile(next, replacedIdentity);
+  next.tombstones[replacedIdentity] = toTombstone(previous);
   delete next.files[replacedIdentity];
   delete next.paths[previous.currentPath];
   const reset = resetCursor(replacement, replacement.parser);
