@@ -37,7 +37,7 @@ scripts/install-agent.sh \
 
 On Linux, Codex CLI sessions are normally below `$HOME/.codex/sessions`. VS Code extension logs are normally below `$HOME/.config/Code/logs` on Linux and `%APPDATA%\Code\logs` on Windows. Configure only paths that exist on your workstation. Session metadata distinguishes CLI, VS Code, Desktop, and unknown (`other`) events.
 
-The real Linux installation writes mode-`0600` configuration below `~/.config/codex-usage-dashboard-agent/`. Use `--windows-task` to print Windows setup commands.
+The real Linux installation writes mode-`0600` configuration below `~/.config/codex-usage-dashboard-agent/` and installs one supervised watcher service. It requires systemd user lingering so the watcher survives logout; enable it with `loginctl enable-linger "$USER"`, or explicitly accept session-only operation with `--allow-session-only`. Existing queue data is preserved, the previous installation is backed up, and a failed health check restores the prior service state. Use `--windows-task` to print the single Windows watcher task XML.
 
 ## Docker and HTTPS
 
