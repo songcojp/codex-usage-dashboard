@@ -94,7 +94,22 @@ describe("ingestBatch Postgres persistence", () => {
       };
 
       const firstResult = await ingestBatch({ tokenHash, batch: testBatch, db });
-      const secondResult = await ingestBatch({ tokenHash, batch: testBatch, db });
+      const secondResult = await ingestBatch({
+        tokenHash,
+        batch: {
+          ...testBatch,
+          events: [{ ...testBatch.events[0], taskId: "recovered-task" }]
+        },
+        db
+      });
+      await ingestBatch({
+        tokenHash,
+        batch: {
+          ...testBatch,
+          events: [{ ...testBatch.events[0], taskId: "different-real-task" }]
+        },
+        db
+      });
 
       const [tool] = await db.select({ id: tools.id }).from(tools).where(eq(tools.slug, "codex-cli"));
       const [device] = await db
@@ -103,7 +118,7 @@ describe("ingestBatch Postgres persistence", () => {
         .where(eq(devices.deviceTokenHash, tokenHash));
 
       const eventRows = await db
-        .select({ id: usageEvents.id })
+        .select({ id: usageEvents.id, taskId: usageEvents.taskId })
         .from(usageEvents)
         .where(
           and(
@@ -130,7 +145,7 @@ describe("ingestBatch Postgres persistence", () => {
 
       expect(firstResult).toEqual({ inserted: 1, duplicates: 0, rejected: [] });
       expect(secondResult).toEqual({ inserted: 0, duplicates: 1, rejected: [] });
-      expect(eventRows).toHaveLength(1);
+      expect(eventRows).toMatchObject([{ taskId: "recovered-task" }]);
       expect(rollupRows).toEqual([{ eventCount: 1, totalTokens: 20 }]);
     }
   );
