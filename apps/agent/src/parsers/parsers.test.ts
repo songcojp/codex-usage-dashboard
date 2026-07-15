@@ -141,6 +141,7 @@ describe("Codex parser adapters", () => {
     );
 
     expect(events).toMatchObject([{ toolSlug: "other" }]);
+    expect(events[0]?.taskId).toBe("unknown-client-session");
   });
 
   it("parses legacy Codex CLI usage without leaking paths or content", async () => {
@@ -166,6 +167,7 @@ describe("Codex parser adapters", () => {
     expect(events).toMatchObject([
       {
         toolSlug: "codex-cli",
+        taskId: "session-1",
         occurredAt: "2026-05-30T01:00:00.000Z",
         model: "gpt-5",
         inputTokens: 100,
