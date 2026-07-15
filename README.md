@@ -48,16 +48,18 @@ The watcher ingests appended bytes immediately and performs a full reconciliatio
 Upgrade and migrate the server before replaying historical logs. Then preview the locally recoverable task IDs without changing watcher state or sending data:
 
 ```bash
-npm run agent -- backfill-task-ids --dry-run
+NODE_EXTRA_CA_CERTS="$HOME/.config/codex-usage-dashboard-agent/server-ca.crt" \
+  npm run agent -- backfill-task-ids --dry-run
 ```
 
 After confirming that the configured server includes the task-ID migration, submit the replay:
 
 ```bash
-npm run agent -- backfill-task-ids --confirm
+NODE_EXTRA_CA_CERTS="$HOME/.config/codex-usage-dashboard-agent/server-ca.crt" \
+  npm run agent -- backfill-task-ids --confirm
 ```
 
-The command reads configured Codex session JSONL files from the beginning in batches of at most 500 events. It does not reset watcher cursors or modify the durable queue, and it is safe to run again. Duplicate events only replace a device-specific fallback task with a recovered real task ID; they do not change token or cost values. Events whose original task cannot be recovered remain grouped in one fallback task for that device.
+The `NODE_EXTRA_CA_CERTS` prefix is required for private-HTTPS installations and can be omitted when the server certificate already chains to a public CA. The command reads configured Codex session JSONL files from the beginning in batches of at most 500 events. It does not reset watcher cursors or modify the durable queue, and it is safe to run again. Duplicate events only replace a device-specific fallback task with a recovered real task ID; they do not change token or cost values. Events whose original task cannot be recovered remain grouped in one fallback task for that device.
 
 ## OS and browser certificate trust
 
