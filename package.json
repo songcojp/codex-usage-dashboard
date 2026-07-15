@@ -16,7 +16,7 @@
     "typecheck": "npm --workspace @codex-usage-dashboard/shared run typecheck && npm --workspace @codex-usage-dashboard/agent run typecheck && npm --workspace @codex-usage-dashboard/server run typecheck && npm --workspace @codex-usage-dashboard/server-web run typecheck",
     "dev:server": "npm --workspace @codex-usage-dashboard/server run dev",
     "dev:web": "npm --workspace @codex-usage-dashboard/server-web run dev",
-    "agent": "npm --workspace @codex-usage-dashboard/agent run cli",
+    "agent": "npm --workspace @codex-usage-dashboard/agent run cli --",
     "check:open-source": "node scripts/check-open-source.mjs ."
   },
   "devDependencies": {
