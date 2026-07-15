@@ -25,6 +25,20 @@ export type TrendPoint = UsageSummary & {
   }>;
 };
 
+export type ProjectRatioItem = {
+  projectKey: string;
+  projectName: string;
+  totalTokens: number;
+};
+
+export type ProjectRatioResponse = {
+  daily: Array<{
+    day: string;
+    projects: ProjectRatioItem[];
+  }>;
+  total: ProjectRatioItem[];
+};
+
 export type UsageEvent = UsageSummary & {
   id: string;
   occurredAt: string;
@@ -113,6 +127,7 @@ export type SortDir = "asc" | "desc";
 export type DashboardData = {
   summary: UsageSummary;
   trends: { points: TrendPoint[] };
+  projectRatios: ProjectRatioResponse;
   events: { rows: UsageEvent[]; total: number };
   devices: { rows: Device[] };
   projects: { rows: Project[] };
@@ -210,11 +225,24 @@ export async function getDashboardData(
   const projectQuery = appendQuery(query, `sortBy=${projectSort.sortBy}&sortDir=${projectSort.sortDir}`);
   const deviceOptionsQuery = toQueryString(withoutKeys(filters, ["deviceId"]));
   const projectOptionsQuery = toQueryString(withoutKeys(filters, ["projectId"]));
+  const projectRatioQuery = toQueryString(withoutKeys(filters, ["projectId"]));
   const modelQuery = toQueryString(withoutKeys(filters, ["model"]));
-  const [summary, trends, events, devices, projects, deviceOptions, projectOptions, models, tools, modelPrices] =
-    await Promise.all([
+  const [
+    summary,
+    trends,
+    projectRatios,
+    events,
+    devices,
+    projects,
+    deviceOptions,
+    projectOptions,
+    models,
+    tools,
+    modelPrices
+  ] = await Promise.all([
       apiGet<UsageSummary>(`/api/admin/summary${query}`),
       apiGet<{ points: TrendPoint[] }>(`/api/admin/trends${query}`),
+      apiGet<ProjectRatioResponse>(`/api/admin/project-ratios${projectRatioQuery}`),
       apiGet<{ rows: UsageEvent[]; total: number }>(`/api/admin/events${eventQuery}`),
       apiGet<{ rows: Device[] }>(`/api/admin/devices${query}`),
       apiGet<{ rows: Project[] }>(`/api/admin/projects${projectQuery}`),
@@ -228,6 +256,7 @@ export async function getDashboardData(
   return {
     summary,
     trends,
+    projectRatios,
     events,
     devices,
     projects,
