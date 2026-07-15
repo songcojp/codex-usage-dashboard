@@ -1,18 +1,26 @@
-import { LineChart } from "echarts/charts";
+import { LineChart, PieChart } from "echarts/charts";
 import { GridComponent, LegendComponent, TooltipComponent } from "echarts/components";
 import { type ECharts, init, use } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { TrendPoint } from "../api.js";
+import type { ProjectRatioResponse, TrendPoint } from "../api.js";
 import type { Language, Theme, Translate } from "../dashboard-types.js";
 
-use([GridComponent, LegendComponent, LineChart, TooltipComponent, CanvasRenderer]);
+use([GridComponent, LegendComponent, LineChart, PieChart, TooltipComponent, CanvasRenderer]);
 
 type TrendMode = "daily" | "cumulative";
-type TrendFilter = "all" | "tokens" | "cost" | "app-ratio" | "token-ratio" | "cost-ratio";
+type TrendFilter =
+  | "all"
+  | "tokens"
+  | "cost"
+  | "tool-ratio"
+  | "project-ratio"
+  | "token-ratio"
+  | "cost-ratio";
 
 type TrendPanelProps = {
   points: TrendPoint[];
+  projectRatios: ProjectRatioResponse;
   initialLoading: boolean;
   language: Language;
   theme: Theme;
@@ -20,7 +28,15 @@ type TrendPanelProps = {
   meta?: string;
 };
 
-export function TrendPanel({ points, initialLoading, language, theme, t, meta }: TrendPanelProps) {
+export function TrendPanel({
+  points,
+  projectRatios,
+  initialLoading,
+  language,
+  theme,
+  t,
+  meta
+}: TrendPanelProps) {
   const [trendMode, setTrendMode] = useState<TrendMode>("daily");
   const [trendFilter, setTrendFilter] = useState<TrendFilter>("all");
 
@@ -29,8 +45,10 @@ export function TrendPanel({ points, initialLoading, language, theme, t, meta }:
       <div className="chart-header-row">
         <div className="panel-header">
           <div>
-            <h2>{t("Usage trend")}</h2>
-            {meta ? <p>{meta}</p> : null}
+            <h2>{t(trendFilter === "project-ratio" ? "Project ratio" : "Usage trend")}</h2>
+            {meta && !(trendFilter === "project-ratio" && trendMode === "cumulative") ? (
+              <p>{meta}</p>
+            ) : null}
           </div>
         </div>
         <div className="chart-controls">
@@ -47,11 +65,11 @@ export function TrendPanel({ points, initialLoading, language, theme, t, meta }:
               onClick={() => setTrendMode("cumulative")}
               type="button"
             >
-              {t("Cumulative")}
+              {t(trendFilter === "project-ratio" ? "Total" : "Cumulative")}
             </button>
           </div>
           <div className="toggle-group" role="group" aria-label="Trend Filter">
-            {(["all", "tokens", "cost", "app-ratio", "token-ratio", "cost-ratio"] as const).map((filter) => (
+            {(["all", "tokens", "cost", "tool-ratio", "project-ratio", "token-ratio", "cost-ratio"] as const).map((filter) => (
               <button
                 className={trendFilter === filter ? "toggle-btn active" : "toggle-btn"}
                 key={filter}
@@ -65,8 +83,10 @@ export function TrendPanel({ points, initialLoading, language, theme, t, meta }:
                     ? "Tokens"
                     : filter === "cost"
                     ? "Cost"
-                    : filter === "app-ratio"
-                    ? "App ratio"
+                    : filter === "tool-ratio"
+                    ? "Tool ratio"
+                    : filter === "project-ratio"
+                    ? "Project ratio"
                     : filter === "token-ratio"
                     ? "Token ratio"
                     : "Cost ratio"
@@ -80,6 +100,7 @@ export function TrendPanel({ points, initialLoading, language, theme, t, meta }:
         initialLoading={initialLoading}
         language={language}
         points={points}
+        projectRatios={projectRatios}
         t={t}
         theme={theme}
         trendFilter={trendFilter}
@@ -95,8 +116,9 @@ export function createTrendChartOption(
   language: Language,
   theme: Theme = "light",
   trendMode: TrendMode = "daily",
-  trendFilter: TrendFilter = "all"
-) {
+  trendFilter: TrendFilter = "all",
+  projectRatios: ProjectRatioResponse = { daily: [], total: [] }
+): any {
   let processedPoints = [...points];
   if (trendMode === "cumulative") {
     let total = 0;
@@ -107,7 +129,7 @@ export function createTrendChartOption(
     let inputCost = 0;
     let outputCost = 0;
     let cacheCost = 0;
-    const toolTotals: Record<string, { totalTokens: number; costUsd: number }> = {};
+    const toolTotals: Record<string, { toolName: string; totalTokens: number; costUsd: number }> = {};
 
     processedPoints = points.map((point) => {
       total += point.totalTokens;
@@ -119,18 +141,20 @@ export function createTrendChartOption(
       outputCost += point.outputCostUsd ?? 0;
       cacheCost += point.cacheCostUsd ?? 0;
 
-      const cumToolUsages = (point.toolUsages || []).map((u) => {
+      for (const u of point.toolUsages || []) {
         if (!toolTotals[u.toolSlug]) {
-          toolTotals[u.toolSlug] = { totalTokens: 0, costUsd: 0 };
+          toolTotals[u.toolSlug] = { toolName: u.toolName, totalTokens: 0, costUsd: 0 };
         }
         toolTotals[u.toolSlug].totalTokens += u.totalTokens;
         toolTotals[u.toolSlug].costUsd += u.costUsd;
-        return {
-          ...u,
-          totalTokens: toolTotals[u.toolSlug].totalTokens,
-          costUsd: toolTotals[u.toolSlug].costUsd
-        };
-      });
+      }
+
+      const cumToolUsages = Object.entries(toolTotals).map(([toolSlug, usage]) => ({
+        toolSlug,
+        toolName: usage.toolName,
+        totalTokens: usage.totalTokens,
+        costUsd: usage.costUsd
+      }));
 
       return {
         ...point,
@@ -155,10 +179,72 @@ export function createTrendChartOption(
   const splitLineColor = theme === "dark" ? "#243754" : "#e8edf3";
   const axisLineColor = theme === "dark" ? "#354965" : "#d9e1eb";
 
+  if (trendFilter === "project-ratio" && trendMode === "cumulative") {
+    return {
+      backgroundColor: theme === "dark" ? "#0d1b2e" : "#ffffff",
+      color: colors,
+      tooltip: {
+        trigger: "item",
+        formatter: "{b}: {c} Token ({d}%)",
+        backgroundColor: theme === "dark" ? "#0d213f" : "#ffffff",
+        borderColor: axisLineColor,
+        textStyle: { color: theme === "dark" ? "#f5f7fa" : "#0b1830" }
+      },
+      legend: {
+        type: "scroll",
+        top: 0,
+        left: 0,
+        right: 0,
+        textStyle: { color: textColor }
+      },
+      series: [
+        {
+          name: t("Project ratio"),
+          type: "pie",
+          radius: ["42%", "70%"],
+          center: ["50%", "56%"],
+          avoidLabelOverlap: true,
+          itemStyle: {
+            borderColor: theme === "dark" ? "#0d1b2e" : "#ffffff",
+            borderWidth: 2
+          },
+          label: { color: textColor, formatter: "{b}\n{d}%" },
+          data: projectRatios.total
+            .filter((project) => project.totalTokens > 0)
+            .map((project) => ({ name: project.projectName, value: project.totalTokens }))
+        }
+      ]
+    };
+  }
+
   let visibleSeries: any[] = [];
   const isRatio = trendFilter.endsWith("-ratio");
+  let axisDays = processedPoints.map((point) => point.day);
 
-  if (trendFilter === "token-ratio") {
+  if (trendFilter === "project-ratio") {
+    axisDays = projectRatios.daily.map((point) => point.day);
+    const projectNames = new Map<string, string>();
+    for (const point of projectRatios.daily) {
+      for (const project of point.projects) {
+        projectNames.set(project.projectKey, project.projectName);
+      }
+    }
+
+    visibleSeries = [...projectNames].map(([projectKey, projectName], index) => {
+      const values = projectRatios.daily.map((point) => {
+        const totalTokens = point.projects.reduce((sum, project) => sum + project.totalTokens, 0);
+        const project = point.projects.find((item) => item.projectKey === projectKey);
+        return totalTokens > 0 && project
+          ? Number(((project.totalTokens / totalTokens) * 100).toFixed(1))
+          : 0;
+      });
+      return makeSeries(projectName, values, colors[index % colors.length]);
+    });
+
+    if (visibleSeries.length === 0) {
+      visibleSeries = [makeSeries(t("No project usage"), axisDays.map(() => 0), colors[0])];
+    }
+  } else if (trendFilter === "token-ratio") {
     const tokenRatioValues = {
       input: processedPoints.map((point) => {
         const total = point.inputTokens + point.outputTokens + point.cacheReadTokens + point.cacheWriteTokens;
@@ -208,7 +294,7 @@ export function createTrendChartOption(
       makeSeries(t("Output cost ratio"), costRatioValues.output, colors[2]),
       makeSeries(t("Cache cost ratio"), costRatioValues.cache, colors[3])
     ];
-  } else if (trendFilter === "app-ratio") {
+  } else if (trendFilter === "tool-ratio") {
     const allTools = Array.from(
       new Set(processedPoints.flatMap((point) => (point.toolUsages || []).map((u) => u.toolSlug)))
     ).sort();
@@ -224,15 +310,17 @@ export function createTrendChartOption(
       const toolValues = processedPoints.map((point) => {
         const usages = point.toolUsages || [];
         const target = usages.find((u) => u.toolSlug === toolSlug);
-        const totalCost = usages.reduce((sum, u) => sum + u.costUsd, 0);
-        return totalCost > 0 && target ? Number(((target.costUsd / totalCost) * 100).toFixed(1)) : 0;
+        const totalTokens = usages.reduce((sum, u) => sum + u.totalTokens, 0);
+        return totalTokens > 0 && target
+          ? Number(((target.totalTokens / totalTokens) * 100).toFixed(1))
+          : 0;
       });
       const color = colors[idx % colors.length];
       return makeSeries(toolNames[toolSlug] || toolSlug, toolValues, color);
     });
 
     if (visibleSeries.length === 0) {
-      visibleSeries = [makeSeries(t("No applications"), processedPoints.map(() => 0), colors[0])];
+      visibleSeries = [makeSeries(t("No tools"), processedPoints.map(() => 0), colors[0])];
     }
   } else {
     const values = {
@@ -266,7 +354,7 @@ export function createTrendChartOption(
     legend: { top: 0, right: 0, textStyle: { color: textColor } },
     xAxis: {
       type: "category",
-      data: processedPoints.map((point) => formatUtcDateLabel(point.day)),
+      data: axisDays.map(formatUtcDateLabel),
       boundaryGap: false,
       axisLabel: { color: textColor },
       axisLine: { lineStyle: { color: axisLineColor } }
@@ -311,6 +399,7 @@ function makeSeries(name: string, data: number[], color: string, width = 2) {
 
 function TrendChart({
   points,
+  projectRatios,
   initialLoading,
   language,
   t,
@@ -319,6 +408,7 @@ function TrendChart({
   trendFilter
 }: {
   points: TrendPoint[];
+  projectRatios: ProjectRatioResponse;
   initialLoading: boolean;
   language: Language;
   t: Translate;
@@ -327,13 +417,18 @@ function TrendChart({
   trendFilter: TrendFilter;
 }) {
   const chartElement = useRef<HTMLDivElement | null>(null);
+  const hasData = trendFilter === "project-ratio"
+    ? trendMode === "daily"
+      ? projectRatios.daily.length > 0
+      : projectRatios.total.length > 0
+    : points.length > 0;
   const chartOption = useMemo(
-    () => createTrendChartOption(points, t, language, theme, trendMode, trendFilter),
-    [language, points, t, theme, trendMode, trendFilter]
+    () => createTrendChartOption(points, t, language, theme, trendMode, trendFilter, projectRatios),
+    [language, points, projectRatios, t, theme, trendMode, trendFilter]
   );
 
   useEffect(() => {
-    if (!chartElement.current || initialLoading || points.length === 0) return;
+    if (!chartElement.current || initialLoading || !hasData) return;
     let chart: ECharts | null = init(chartElement.current);
     chart.setOption(chartOption);
     const handleResize = () => chart?.resize();
@@ -343,10 +438,16 @@ function TrendChart({
       chart?.dispose();
       chart = null;
     };
-  }, [chartOption, initialLoading, points.length]);
+  }, [chartOption, hasData, initialLoading]);
 
   if (initialLoading) return <div className="chart-empty chart-skeleton">{t("Loading trend data...")}</div>;
-  if (points.length === 0) return <div className="chart-empty">{t("No trend data for this range.")}</div>;
+  if (!hasData) {
+    return (
+      <div className="chart-empty">
+        {t(trendFilter === "project-ratio" ? "No project usage" : "No trend data for this range.")}
+      </div>
+    );
+  }
   return <div className="chart-surface" ref={chartElement} role="img" aria-label={t("Token usage trend chart")} />;
 }
 

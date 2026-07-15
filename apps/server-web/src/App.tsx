@@ -355,6 +355,7 @@ export function App() {
             language={language}
             meta={`${filters.from} to ${filters.to} (${filters.timeZone})`}
             points={data?.trends.points ?? []}
+            projectRatios={data?.projectRatios ?? { daily: [], total: [] }}
             t={t}
             theme={theme}
           />

@@ -111,9 +111,11 @@ const zh: Record<string, string> = {
   "Failed to delete model price": "删除模型价格失败",
   Daily: "单日用量",
   Cumulative: "累计用量",
+  Total: "总量",
   All: "全部显示",
   Tokens: "仅显 Token",
-  "App ratio": "应用消耗占比",
+  "Tool ratio": "工具占比",
+  "Project ratio": "项目占比",
   "Token ratio": "Token类型占比",
   "Cost ratio": "费用占比",
   "Input ratio": "输入占比",
@@ -122,7 +124,8 @@ const zh: Record<string, string> = {
   "Input cost ratio": "输入费用占比",
   "Output cost ratio": "输出费用占比",
   "Cache cost ratio": "缓存费用占比",
-  "No applications": "无应用数据"
+  "No tools": "无工具数据",
+  "No project usage": "无项目用量数据"
 };
 
 export default zh;
