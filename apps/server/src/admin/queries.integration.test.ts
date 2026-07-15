@@ -80,6 +80,21 @@ describe("admin query service Postgres persistence", () => {
         costUsd: "0.1234",
         rawMetaJson: {}
       });
+      await db.insert(usageEvents).values({
+        occurredAt: new Date("2026-05-29T12:00:00.000Z"),
+        toolId: tool.id,
+        deviceId: device.id,
+        projectId: project.id,
+        sourceEventId: `earlier-event-${unique}`,
+        model: null,
+        inputTokens: 10,
+        outputTokens: 5,
+        cacheReadTokens: 3,
+        cacheWriteTokens: 2,
+        totalTokens: 20,
+        costUsd: "0.1234",
+        rawMetaJson: {}
+      });
       await db.insert(dailyUsageRollups).values({
         day: "2026-05-30",
         toolId: tool.id,
@@ -105,6 +120,7 @@ describe("admin query service Postgres persistence", () => {
       };
       const summary = await service.getSummary(filters);
       const trends = await service.getTrends(filters);
+      const projectRatios = await service.getProjectRatios(filters);
       const events = await service.getEvents(filters);
       const sortedEvents = await service.getEvents({
         ...filters,
@@ -164,6 +180,27 @@ describe("admin query service Postgres persistence", () => {
           ]
         }
       ]);
+      expect(projectRatios).toEqual({
+        daily: [
+          {
+            day: "2026-05-30",
+            projects: [
+              {
+                projectKey: `repo:${project.repoHash}`,
+                projectName: project.displayName,
+                totalTokens: 20
+              }
+            ]
+          }
+        ],
+        total: [
+          {
+            projectKey: `repo:${project.repoHash}`,
+            projectName: project.displayName,
+            totalTokens: 40
+          }
+        ]
+      });
       expect(events.total).toBe(1);
       expect(events.rows[0]).toMatchObject({
         tool: tool.slug,

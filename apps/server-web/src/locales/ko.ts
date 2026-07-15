@@ -111,9 +111,11 @@ const ko: Record<string, string> = {
   "Failed to delete model price": "모델 가격을 삭제하지 못했습니다",
   Daily: "일별",
   Cumulative: "누적",
+  Total: "총합",
   All: "전체",
   Tokens: "토큰",
-  "App ratio": "앱 소모 비율",
+  "Tool ratio": "도구 비율",
+  "Project ratio": "프로젝트 비율",
   "Token ratio": "토큰 유형 비율",
   "Cost ratio": "비용 비율",
   "Input ratio": "입력 비율",
@@ -122,7 +124,8 @@ const ko: Record<string, string> = {
   "Input cost ratio": "입력 비용 비율",
   "Output cost ratio": "출력 비용 비율",
   "Cache cost ratio": "캐시 비용 비율",
-  "No applications": "앱 없음"
+  "No tools": "도구 데이터 없음",
+  "No project usage": "프로젝트 사용량 데이터 없음"
 };
 
 export default ko;

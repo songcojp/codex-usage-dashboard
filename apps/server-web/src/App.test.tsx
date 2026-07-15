@@ -343,6 +343,9 @@ function handleRequest(input: RequestInfo | URL) {
   if (path.startsWith("/api/admin/trends")) {
     return response({ points: [] });
   }
+  if (path.startsWith("/api/admin/project-ratios")) {
+    return response({ daily: [], total: [] });
+  }
   if (path.startsWith("/api/admin/events")) {
     return response({
       total: 60,

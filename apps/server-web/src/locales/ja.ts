@@ -111,9 +111,11 @@ const ja: Record<string, string> = {
   "Failed to delete model price": "モデル価格の削除に失敗しました",
   Daily: "日次",
   Cumulative: "累加",
+  Total: "総量",
   All: "すべて",
   Tokens: "トークン",
-  "App ratio": "アプリ消費割合",
+  "Tool ratio": "ツール割合",
+  "Project ratio": "プロジェクト割合",
   "Token ratio": "トークンタイプ割合",
   "Cost ratio": "費用割合",
   "Input ratio": "入力割合",
@@ -122,7 +124,8 @@ const ja: Record<string, string> = {
   "Input cost ratio": "入力費用割合",
   "Output cost ratio": "出力費用割合",
   "Cache cost ratio": "キャッシュ費用割合",
-  "No applications": "アプリなし"
+  "No tools": "ツールデータなし",
+  "No project usage": "プロジェクト使用量データなし"
 };
 
 export default ja;

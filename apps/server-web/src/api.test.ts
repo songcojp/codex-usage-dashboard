@@ -42,6 +42,7 @@ describe("admin API client", () => {
       const path = input.toString();
       if (path.startsWith("/api/admin/summary")) return jsonResponse(emptySummary());
       if (path.startsWith("/api/admin/trends")) return jsonResponse({ points: [] });
+      if (path.startsWith("/api/admin/project-ratios")) return jsonResponse({ daily: [], total: [] });
       if (path.startsWith("/api/admin/events")) return jsonResponse({ rows: [], total: 0 });
       if (path.startsWith("/api/admin/devices")) return jsonResponse({ rows: [] });
       if (path.startsWith("/api/admin/projects")) return jsonResponse({ rows: [] });
@@ -81,6 +82,12 @@ describe("admin API client", () => {
     );
     expect(paths).toContain(
       "/api/admin/events?from=2026-05-01&to=2026-05-30&tool=codex-cli&deviceId=00000000-0000-4000-8000-000000000001&projectId=00000000-0000-4000-8000-000000000002&model=gpt-5&timeZone=UTC&limit=25&offset=0&sortBy=cacheTokens&sortDir=desc"
+    );
+    expect(paths).toContain(
+      "/api/admin/project-ratios?from=2026-05-01&to=2026-05-30&tool=codex-cli&deviceId=00000000-0000-4000-8000-000000000001&model=gpt-5&timeZone=UTC"
+    );
+    expect(paths.find((path) => path.startsWith("/api/admin/project-ratios"))).not.toContain(
+      "projectId="
     );
   });
 });

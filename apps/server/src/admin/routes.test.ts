@@ -1,7 +1,7 @@
 import { hashToken } from "@codex-usage-dashboard/shared";
 import { describe, expect, it } from "vitest";
 import { buildApp } from "../app.js";
-import type { AdminQueryService } from "./queries.js";
+import type { AdminQueryService, UsageFilters } from "./queries.js";
 
 const env = {
   ADMIN_EMAIL: "admin@example.com",
@@ -30,6 +30,9 @@ function createQueryService(): AdminQueryService {
     },
     async getTrends() {
       return { points: [] };
+    },
+    async getProjectRatios() {
+      return { daily: [], total: [] };
     },
     async getEvents() {
       return { rows: [], total: 0 };
@@ -91,6 +94,41 @@ async function login() {
 }
 
 describe("admin routes", () => {
+  it("returns project ratios without applying the selected project", async () => {
+    let seenFilters: UsageFilters | undefined;
+    const queryService = createQueryService();
+    queryService.getProjectRatios = async (nextFilters) => {
+      seenFilters = nextFilters;
+      return { daily: [], total: [] };
+    };
+    const app = await buildApp({ adminQueryService: queryService, env });
+
+    try {
+      const loginResponse = await app.inject({
+        method: "POST",
+        url: "/api/admin/login",
+        payload: { email: "admin@example.com", password: "secret" }
+      });
+      const cookie = loginResponse.cookies.map((item) => `${item.name}=${item.value}`).join("; ");
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/admin/project-ratios?from=2026-07-01&to=2026-07-15&timeZone=UTC&tool=codex-cli&projectId=${validDeviceId}`,
+        headers: { cookie }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(seenFilters).toMatchObject({
+        from: "2026-07-01",
+        to: "2026-07-15",
+        tool: "codex-cli",
+        timeZone: "UTC"
+      });
+      expect(seenFilters?.projectId).toBeUndefined();
+    } finally {
+      await app.close();
+    }
+  });
+
   it("rejects protected routes without an admin session", async () => {
     const app = await buildApp({ adminQueryService: createQueryService(), env });
 

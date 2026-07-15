@@ -40,6 +40,17 @@ export type UsageSummary = {
   eventCount: number;
 };
 
+export type ProjectRatioItem = {
+  projectKey: string;
+  projectName: string;
+  totalTokens: number;
+};
+
+export type ProjectRatioResponse = {
+  daily: Array<{ day: string; projects: ProjectRatioItem[] }>;
+  total: ProjectRatioItem[];
+};
+
 export type ModelPriceInput = {
   model: string;
   inputCostPerMillionUsd: number;
@@ -51,6 +62,7 @@ export type ModelPriceInput = {
 export type AdminQueryService = {
   getSummary(filters: UsageFilters): Promise<UsageSummary>;
   getTrends(filters: UsageFilters): Promise<{ points: Array<Record<string, unknown>> }>;
+  getProjectRatios(filters: UsageFilters): Promise<ProjectRatioResponse>;
   getEvents(
     filters: UsageFilters & { limit?: number; offset?: number; sortBy?: EventSortBy; sortDir?: SortDir }
   ): Promise<{
@@ -88,6 +100,14 @@ type ProjectUsageRow = {
   totalTokens: string | number | null | undefined;
   costUsd: string | number | null | undefined;
   eventCount: string | number | null | undefined;
+};
+
+type ProjectRatioRow = {
+  day: string;
+  id: string;
+  displayName: string;
+  repoHash: string | null;
+  totalTokens: string | number | null | undefined;
 };
 
 let defaultDb: TokenReportDb | undefined;
@@ -191,6 +211,47 @@ export function createAdminQueryService(db?: AdminDb): AdminQueryService {
           toolUsages: toolUsagesByDay[row.day ?? ""] ?? []
         }))
       };
+    },
+
+    async getProjectRatios(filters) {
+      const day = reportingDaySql(filters);
+      const [dailyRows, totalRows] = await Promise.all([
+        adminDb()
+          .select({
+            day,
+            id: projects.id,
+            displayName: projects.displayName,
+            repoHash: projects.repoHash,
+            totalTokens: sum(usageEvents.totalTokens)
+          })
+          .from(usageEvents)
+          .innerJoin(tools, eq(usageEvents.toolId, tools.id))
+          .innerJoin(projects, eq(usageEvents.projectId, projects.id))
+          .where(eventWhere({ ...filters, projectId: undefined }))
+          .groupBy(day, projects.id, projects.displayName, projects.repoHash)
+          .orderBy(day),
+        adminDb()
+          .select({
+            day: sql<string>`''`,
+            id: projects.id,
+            displayName: projects.displayName,
+            repoHash: projects.repoHash,
+            totalTokens: sum(usageEvents.totalTokens)
+          })
+          .from(usageEvents)
+          .innerJoin(tools, eq(usageEvents.toolId, tools.id))
+          .innerJoin(projects, eq(usageEvents.projectId, projects.id))
+          .where(
+            eventWhere({
+              tool: filters.tool,
+              deviceId: filters.deviceId,
+              model: filters.model
+            })
+          )
+          .groupBy(projects.id, projects.displayName, projects.repoHash)
+      ]);
+
+      return createProjectRatioResponse(dailyRows, totalRows);
     },
 
     async getEvents(filters) {
@@ -475,6 +536,54 @@ export function mergeProjectRowsByRepoHash(
   }
 
   return [...grouped.values()];
+}
+
+export function mergeProjectRatioRows(
+  rows: ProjectRatioRow[]
+): Array<{ day: string } & ProjectRatioItem> {
+  const grouped = new Map<string, { day: string } & ProjectRatioItem>();
+
+  for (const row of rows) {
+    const projectKey = row.repoHash ? `repo:${row.repoHash}` : `project:${row.id}`;
+    const key = `${row.day}|${projectKey}`;
+    const existing = grouped.get(key);
+
+    if (existing) {
+      existing.totalTokens += numberFromAggregate(row.totalTokens);
+      continue;
+    }
+
+    grouped.set(key, {
+      day: row.day,
+      projectKey,
+      projectName: row.displayName,
+      totalTokens: numberFromAggregate(row.totalTokens)
+    });
+  }
+
+  return [...grouped.values()];
+}
+
+export function createProjectRatioResponse(
+  dailyRows: ProjectRatioRow[],
+  totalRows: ProjectRatioRow[]
+): ProjectRatioResponse {
+  const daily = new Map<string, ProjectRatioItem[]>();
+
+  for (const row of mergeProjectRatioRows(dailyRows)) {
+    const projectsForDay = daily.get(row.day) ?? [];
+    projectsForDay.push({
+      projectKey: row.projectKey,
+      projectName: row.projectName,
+      totalTokens: row.totalTokens
+    });
+    daily.set(row.day, projectsForDay);
+  }
+
+  return {
+    daily: [...daily].map(([day, projects]) => ({ day, projects })),
+    total: mergeProjectRatioRows(totalRows).map(({ day: _day, ...project }) => project)
+  };
 }
 
 function eventWhere(filters: Partial<UsageFilters> | undefined) {
