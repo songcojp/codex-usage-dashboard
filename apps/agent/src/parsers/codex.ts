@@ -106,6 +106,7 @@ export async function parseCodexLine(
       context: input.context,
       event: usageEventDraftSchema.parse({
         sourceEventId: sha256Hex(sourceIdBasis),
+        taskId: input.context.sessionId,
         toolSlug: input.context.toolSlug,
         occurredAt,
         project: await identityFromCwd({ cwd: activeCwd }),
@@ -171,6 +172,7 @@ async function parseLegacyUsageRecord(record: CodexUsageRecord, recordNumber: nu
 
   return usageEventDraftSchema.parse({
     sourceEventId: sha256Hex(sourceIdBasis),
+    taskId: stableRecordId,
     toolSlug: "codex-cli",
     occurredAt,
     project: await identityFromCwd({ cwd }),

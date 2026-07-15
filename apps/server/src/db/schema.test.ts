@@ -16,6 +16,8 @@ describe("database schema", () => {
     expect(usageEvents.deviceId.name).toBe("device_id");
     expect(usageEvents.toolId.name).toBe("tool_id");
     expect(usageEvents.sourceEventId.name).toBe("source_event_id");
+    expect(usageEvents.taskId.name).toBe("task_id");
+    expect(usageEvents.taskId.notNull).toBe(true);
     expect(projects.repoHash.notNull).toBe(true);
     expect(projects.repoHash.default).toBe("");
     expect(projects.remoteHash.notNull).toBe(true);
@@ -46,7 +48,8 @@ describe("public database baseline", () => {
   it("ships the initial schema and bigint counter migration", () => {
     expect(migrationFiles).toEqual([
       "0001_initial.sql",
-      "0002_bigint_usage_counters.sql"
+      "0002_bigint_usage_counters.sql",
+      "0003_usage_event_task_ids.sql"
     ]);
     for (const table of ["usage_events", "daily_usage_rollups"]) {
       expect(bigintMigrationSql).toContain(`ALTER TABLE "${table}"`);

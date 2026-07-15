@@ -8,6 +8,7 @@ import { acquireProcessLock } from "./process-lock.js";
 import { DurableQueue } from "./queue.js";
 import { initialAgentState, readAgentState, writeAgentState } from "./state.js";
 import { runWatcher } from "./watcher.js";
+import { backfillTaskIds } from "./task-backfill.js";
 
 export function createProgram(): Command {
   const program = new Command().name("codex-usage-dashboard-agent");
@@ -41,6 +42,19 @@ export function createProgram(): Command {
       process.off("SIGTERM", stop);
     }
   });
+
+  program
+    .command("backfill-task-ids")
+    .option("--confirm", "scan local Codex logs and upload task IDs")
+    .option("--dry-run", "scan local Codex logs without uploading")
+    .action(async (options: { confirm?: boolean; dryRun?: boolean }) => {
+      const config = await readAgentConfig(configPath());
+      console.log(JSON.stringify(await backfillTaskIds({
+        config,
+        confirm: Boolean(options.confirm),
+        dryRun: Boolean(options.dryRun)
+      })));
+    });
 
   program.command("status").action(async () => {
     console.log(JSON.stringify(await readAgentStatus(statePathForConfig(configPath()))));

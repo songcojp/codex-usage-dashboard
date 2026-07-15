@@ -210,9 +210,38 @@ describe("normalizeProjectIdentity", () => {
 });
 
 describe("ingestValidatedBatch", () => {
+  it("enriches a duplicate fallback event with a recovered real task ID", async () => {
+    const enriched: Array<{ sourceEventId: string; taskId: string }> = [];
+    const store: IngestStore = {
+      requireDevice: async () => ({ id: "device-1" }),
+      updateDevice: async () => undefined,
+      resolveTool: async () => ({ id: "tool-1" }),
+      resolveModelPrice: async () => null,
+      upsertProject: async () => ({ id: "project-1" }),
+      insertUsageEvent: async () => false,
+      enrichUsageEventTask: async (event) => {
+        enriched.push({ sourceEventId: event.sourceEventId, taskId: event.taskId });
+      },
+      incrementDailyRollup: async () => undefined
+    };
+
+    const result = await ingestValidatedBatch({
+      tokenHash: "token-hash",
+      batch: {
+        ...validBatch,
+        events: [{ ...validBatch.events[0], taskId: "task-real" }]
+      },
+      store
+    });
+
+    expect(result).toEqual({ inserted: 0, duplicates: 1, rejected: [] });
+    expect(enriched).toEqual([{ sourceEventId: "event-id-123456", taskId: "task-real" }]);
+  });
+
   it("counts inserted and duplicate events while only rolling up newly inserted events", async () => {
     const projects: Array<{ repoHash: string; remoteHash: string; pathHash: string }> = [];
     const rollups: string[] = [];
+    const taskIds: string[] = [];
     const store: IngestStore = {
       requireDevice: async () => ({ id: "device-1" }),
       updateDevice: async () => undefined,
@@ -222,7 +251,11 @@ describe("ingestValidatedBatch", () => {
         projects.push(project);
         return { id: "project-1" };
       },
-      insertUsageEvent: async (event) => event.sourceEventId !== "duplicate-event",
+      insertUsageEvent: async (event) => {
+        taskIds.push(event.taskId);
+        return event.sourceEventId !== "duplicate-event";
+      },
+      enrichUsageEventTask: async () => undefined,
       incrementDailyRollup: async (event) => {
         rollups.push(event.sourceEventId);
       }
@@ -249,6 +282,7 @@ describe("ingestValidatedBatch", () => {
       { displayName: "codex-usage-dashboard", repoHash: "", remoteHash: "", pathHash: "path-hash-123456" }
     ]);
     expect(rollups).toEqual(["event-id-123456"]);
+    expect(taskIds).toEqual(["fallback:device-1", "fallback:device-1"]);
   });
 
   it("uses server-side model pricing instead of uploaded cost values", async () => {
@@ -269,6 +303,7 @@ describe("ingestValidatedBatch", () => {
         insertedCosts.push(event.costUsd);
         return true;
       },
+      enrichUsageEventTask: async () => undefined,
       incrementDailyRollup: async (event) => {
         rollupCosts.push(event.costUsd);
       }
@@ -319,6 +354,7 @@ describe("ingestValidatedBatch", () => {
         insertedCosts.push(event.costUsd);
         return true;
       },
+      enrichUsageEventTask: async () => undefined,
       incrementDailyRollup: async () => undefined
     };
 

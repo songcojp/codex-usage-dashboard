@@ -64,6 +64,7 @@ export const usageEvents = pgTable(
       .references(() => projects.id)
       .notNull(),
     sourceEventId: text("source_event_id").notNull(),
+    taskId: text("task_id").notNull(),
     model: text("model"),
     inputTokens: bigint("input_tokens", { mode: "number" }).notNull().default(0),
     outputTokens: bigint("output_tokens", { mode: "number" }).notNull().default(0),

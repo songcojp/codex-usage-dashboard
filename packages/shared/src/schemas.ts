@@ -15,7 +15,7 @@ export const projectIdentitySchema = z.object({
   pathHash: z.string().min(16)
 });
 
-export const sanitizedMetadataSchema = z.record(z.unknown()).superRefine((metadata, context) => {
+export const sanitizedMetadataSchema = z.record(z.string(), z.unknown()).superRefine((metadata, context) => {
   try {
     assertSanitizedMetadata(metadata);
   } catch (error) {
@@ -28,6 +28,7 @@ export const sanitizedMetadataSchema = z.record(z.unknown()).superRefine((metada
 
 export const usageEventDraftSchema = z.object({
   sourceEventId: z.string().min(12),
+  taskId: z.string().min(1).nullable().optional(),
   toolSlug: toolSlugSchema,
   occurredAt: z.string().datetime(),
   project: projectIdentitySchema,

@@ -5,7 +5,7 @@ import {
   type IngestBatch,
   type UsageEventDraft
 } from "@codex-usage-dashboard/shared";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { createDb, type TokenReportDb } from "../db/client.js";
 import { initialTools } from "../db/seed-tools.js";
 import { dailyUsageRollups, devices, modelPrices, projects, tools, usageEvents } from "../db/schema.js";
@@ -59,10 +59,12 @@ export type IngestStore = {
   resolveModelPrice(model: string): Promise<ModelPriceRates | null>;
   upsertProject(project: NormalizedProjectIdentity): Promise<{ id: string }>;
   insertUsageEvent(event: PersistableUsageEvent): Promise<boolean>;
+  enrichUsageEventTask(event: PersistableUsageEvent): Promise<void>;
   incrementDailyRollup(event: PersistableUsageEvent): Promise<void>;
 };
 
 export type PersistableUsageEvent = UsageEventDraft & {
+  taskId: string;
   deviceId: string;
   toolId: string;
   projectId: string;
@@ -173,6 +175,7 @@ export async function ingestValidatedBatch(input: IngestValidatedBatchInput): Pr
     const project = await input.store.upsertProject(normalizeProjectIdentity(event.project));
     const persistableEvent: PersistableUsageEvent = {
       ...event,
+      taskId: event.taskId ?? fallbackTaskId(device.id),
       costUsd: calculateEventCostUsd(event, rates),
       deviceId: device.id,
       toolId: tool.id,
@@ -181,6 +184,7 @@ export async function ingestValidatedBatch(input: IngestValidatedBatchInput): Pr
 
     const inserted = await input.store.insertUsageEvent(persistableEvent);
     if (!inserted) {
+      await input.store.enrichUsageEventTask(persistableEvent);
       result.duplicates += 1;
       continue;
     }
@@ -190,6 +194,10 @@ export async function ingestValidatedBatch(input: IngestValidatedBatchInput): Pr
   }
 
   return result;
+}
+
+export function fallbackTaskId(deviceId: string): string {
+  return `fallback:${deviceId}`;
 }
 
 export function validateBatch(input: unknown): IngestBatch {
@@ -339,6 +347,7 @@ export function createDrizzleIngestStore(db: DrizzleIngestDb): IngestStore {
           deviceId: event.deviceId,
           projectId: event.projectId,
           sourceEventId: event.sourceEventId,
+          taskId: event.taskId,
           model: event.model,
           inputTokens: event.inputTokens,
           outputTokens: event.outputTokens,
@@ -354,6 +363,23 @@ export function createDrizzleIngestStore(db: DrizzleIngestDb): IngestStore {
         .returning({ id: usageEvents.id });
 
       return Boolean(insertedEvent);
+    },
+
+    async enrichUsageEventTask(event) {
+      const fallback = fallbackTaskId(event.deviceId);
+      if (event.taskId === fallback) return;
+
+      await db
+        .update(usageEvents)
+        .set({ taskId: event.taskId })
+        .where(
+          and(
+            eq(usageEvents.deviceId, event.deviceId),
+            eq(usageEvents.toolId, event.toolId),
+            eq(usageEvents.sourceEventId, event.sourceEventId),
+            eq(usageEvents.taskId, fallback)
+          )
+        );
     },
 
     async incrementDailyRollup(event) {

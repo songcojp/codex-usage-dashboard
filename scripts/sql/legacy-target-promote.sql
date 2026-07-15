@@ -36,7 +36,7 @@ FROM _legacy_import.projects;
 
 INSERT INTO usage_events (
   id, occurred_at, ingested_at, tool_id, device_id, project_id,
-  source_event_id, model, input_tokens, output_tokens,
+  source_event_id, task_id, model, input_tokens, output_tokens,
   cache_read_tokens, cache_write_tokens, total_tokens, cost_usd, raw_meta_json
 )
 SELECT
@@ -47,6 +47,7 @@ SELECT
   e.device_id,
   e.project_id,
   e.source_event_id,
+  'fallback:' || e.device_id::text,
   e.model,
   e.input_tokens,
   e.output_tokens,

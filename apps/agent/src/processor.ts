@@ -194,7 +194,7 @@ function persistParserContext(
     : { kind: "codex-jsonl", ...(context as CodexParserContext) };
 }
 
-function createIngestBatch(config: AgentConfig, events: UsageEventDraft[]): IngestBatch {
+export function createIngestBatch(config: AgentConfig, events: UsageEventDraft[]): IngestBatch {
   return {
     device: {
       name: config.deviceName,
