@@ -6,9 +6,9 @@ import { createProgram, readAgentStatus, resetAgentState } from "./cli.js";
 import { initialAgentState, writeAgentState } from "./state.js";
 
 describe("watcher-only CLI", () => {
-  it("exposes watcher and diagnostics only", () => {
+  it("exposes watcher, task backfill, and diagnostics only", () => {
     const commands = createProgram().commands.map((command) => command.name());
-    expect(commands).toEqual(["watch", "status", "reset-state"]);
+    expect(commands).toEqual(["watch", "backfill-task-ids", "status", "reset-state"]);
     const help = createProgram().helpInformation();
     expect(help).not.toMatch(/\bscan\b|\bupload\b|install-scheduler|\binit\b/);
   });
