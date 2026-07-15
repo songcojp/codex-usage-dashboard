@@ -150,7 +150,18 @@ describe("admin query service Postgres persistence", () => {
           outputTokens: 5,
           cacheReadTokens: 3,
           cacheWriteTokens: 2,
-          costUsd: 0.1234
+          costUsd: 0.1234,
+          inputCostUsd: 0,
+          outputCostUsd: 0,
+          cacheCostUsd: 0,
+          toolUsages: [
+            {
+              toolSlug: tool.slug,
+              toolName: tool.displayName,
+              totalTokens: 20,
+              costUsd: 0.1234
+            }
+          ]
         }
       ]);
       expect(events.total).toBe(1);

@@ -136,13 +136,45 @@ export function createAdminQueryService(db?: AdminDb): AdminQueryService {
           outputTokens: sum(usageEvents.outputTokens),
           cacheReadTokens: sum(usageEvents.cacheReadTokens),
           cacheWriteTokens: sum(usageEvents.cacheWriteTokens),
+          costUsd: sum(usageEvents.costUsd),
+          inputCostUsd: sql<string>`sum(coalesce(${usageEvents.inputTokens} * ${modelPrices.inputCostPerMillionUsd} / 1000000, 0))`,
+          outputCostUsd: sql<string>`sum(coalesce(${usageEvents.outputTokens} * ${modelPrices.outputCostPerMillionUsd} / 1000000, 0))`,
+          cacheCostUsd: sql<string>`sum(coalesce((${usageEvents.cacheReadTokens} * ${modelPrices.cacheReadCostPerMillionUsd} + ${usageEvents.cacheWriteTokens} * ${modelPrices.cacheWriteCostPerMillionUsd}) / 1000000, 0))`
+        })
+        .from(usageEvents)
+        .innerJoin(tools, eq(usageEvents.toolId, tools.id))
+        .leftJoin(modelPrices, eq(usageEvents.model, modelPrices.model))
+        .where(eventWhere(filters))
+        .groupBy(day)
+        .orderBy(day);
+
+      const toolRows = await adminDb()
+        .select({
+          day,
+          toolSlug: tools.slug,
+          toolName: tools.displayName,
+          totalTokens: sum(usageEvents.totalTokens),
           costUsd: sum(usageEvents.costUsd)
         })
         .from(usageEvents)
         .innerJoin(tools, eq(usageEvents.toolId, tools.id))
         .where(eventWhere(filters))
-        .groupBy(day)
-        .orderBy(day);
+        .groupBy(day, tools.slug, tools.displayName);
+
+      const toolUsagesByDay: Record<string, Array<{ toolSlug: string; toolName: string; totalTokens: number; costUsd: number }>> = {};
+      for (const toolRow of toolRows) {
+        if (toolRow.day) {
+          if (!toolUsagesByDay[toolRow.day]) {
+            toolUsagesByDay[toolRow.day] = [];
+          }
+          toolUsagesByDay[toolRow.day].push({
+            toolSlug: toolRow.toolSlug,
+            toolName: toolRow.toolName,
+            totalTokens: numberFromAggregate(toolRow.totalTokens),
+            costUsd: numberFromAggregate(toolRow.costUsd)
+          });
+        }
+      }
 
       return {
         points: rows.map((row) => ({
@@ -152,7 +184,11 @@ export function createAdminQueryService(db?: AdminDb): AdminQueryService {
           outputTokens: numberFromAggregate(row.outputTokens),
           cacheReadTokens: numberFromAggregate(row.cacheReadTokens),
           cacheWriteTokens: numberFromAggregate(row.cacheWriteTokens),
-          costUsd: numberFromAggregate(row.costUsd)
+          costUsd: numberFromAggregate(row.costUsd),
+          inputCostUsd: numberFromAggregate(row.inputCostUsd),
+          outputCostUsd: numberFromAggregate(row.outputCostUsd),
+          cacheCostUsd: numberFromAggregate(row.cacheCostUsd),
+          toolUsages: toolUsagesByDay[row.day ?? ""] ?? []
         }))
       };
     },

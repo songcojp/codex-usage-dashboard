@@ -9,7 +9,7 @@ import type { Language, Theme, Translate } from "../dashboard-types.js";
 use([GridComponent, LegendComponent, LineChart, TooltipComponent, CanvasRenderer]);
 
 type TrendMode = "daily" | "cumulative";
-type TrendFilter = "all" | "cost" | "tokens";
+type TrendFilter = "all" | "tokens" | "cost" | "app-ratio" | "token-ratio" | "cost-ratio";
 
 type TrendPanelProps = {
   points: TrendPoint[];
@@ -51,14 +51,26 @@ export function TrendPanel({ points, initialLoading, language, theme, t, meta }:
             </button>
           </div>
           <div className="toggle-group" role="group" aria-label="Trend Filter">
-            {(["all", "tokens", "cost"] as const).map((filter) => (
+            {(["all", "tokens", "cost", "app-ratio", "token-ratio", "cost-ratio"] as const).map((filter) => (
               <button
                 className={trendFilter === filter ? "toggle-btn active" : "toggle-btn"}
                 key={filter}
                 onClick={() => setTrendFilter(filter)}
                 type="button"
               >
-                {t(filter === "all" ? "All" : filter === "tokens" ? "Tokens" : "Cost")}
+                {t(
+                  filter === "all"
+                    ? "All"
+                    : filter === "tokens"
+                    ? "Tokens"
+                    : filter === "cost"
+                    ? "Cost"
+                    : filter === "app-ratio"
+                    ? "App ratio"
+                    : filter === "token-ratio"
+                    ? "Token ratio"
+                    : "Cost ratio"
+                )}
               </button>
             ))}
           </div>
@@ -92,12 +104,34 @@ export function createTrendChartOption(
     let output = 0;
     let cache = 0;
     let cost = 0;
+    let inputCost = 0;
+    let outputCost = 0;
+    let cacheCost = 0;
+    const toolTotals: Record<string, { totalTokens: number; costUsd: number }> = {};
+
     processedPoints = points.map((point) => {
       total += point.totalTokens;
       input += point.inputTokens;
       output += point.outputTokens;
       cache += point.cacheReadTokens + point.cacheWriteTokens;
       cost += point.costUsd;
+      inputCost += point.inputCostUsd ?? 0;
+      outputCost += point.outputCostUsd ?? 0;
+      cacheCost += point.cacheCostUsd ?? 0;
+
+      const cumToolUsages = (point.toolUsages || []).map((u) => {
+        if (!toolTotals[u.toolSlug]) {
+          toolTotals[u.toolSlug] = { totalTokens: 0, costUsd: 0 };
+        }
+        toolTotals[u.toolSlug].totalTokens += u.totalTokens;
+        toolTotals[u.toolSlug].costUsd += u.costUsd;
+        return {
+          ...u,
+          totalTokens: toolTotals[u.toolSlug].totalTokens,
+          costUsd: toolTotals[u.toolSlug].costUsd
+        };
+      });
+
       return {
         ...point,
         totalTokens: total,
@@ -105,32 +139,118 @@ export function createTrendChartOption(
         outputTokens: output,
         cacheReadTokens: cache,
         cacheWriteTokens: 0,
-        costUsd: cost
+        costUsd: cost,
+        inputCostUsd: inputCost,
+        outputCostUsd: outputCost,
+        cacheCostUsd: cacheCost,
+        toolUsages: cumToolUsages
       };
     });
   }
 
   const colors = theme === "dark"
-    ? ["#4f86ff", "#2dd4bf", "#fb923c", "#22d3ee", "#c084fc"]
-    : ["#1760ff", "#0f766e", "#b45309", "#0891b2", "#7c3aed"];
+    ? ["#4f86ff", "#2dd4bf", "#fb923c", "#22d3ee", "#c084fc", "#a855f7", "#ec4899", "#10b981", "#f59e0b"]
+    : ["#1760ff", "#0f766e", "#b45309", "#0891b2", "#7c3aed", "#7e22ce", "#db2777", "#059669", "#d97706"];
   const textColor = theme === "dark" ? "#9eacc0" : "#526077";
   const splitLineColor = theme === "dark" ? "#243754" : "#e8edf3";
   const axisLineColor = theme === "dark" ? "#354965" : "#d9e1eb";
-  const values = {
-    total: processedPoints.map((point) => point.totalTokens),
-    input: processedPoints.map((point) => point.inputTokens),
-    output: processedPoints.map((point) => point.outputTokens),
-    cache: processedPoints.map((point) => point.cacheReadTokens + point.cacheWriteTokens),
-    cost: processedPoints.map((point) => point.costUsd)
-  };
-  const series = [
-    makeSeries(t("Total tokens"), values.total, colors[0], 3),
-    makeSeries(t("Input"), values.input, colors[1]),
-    makeSeries(t("Output"), values.output, colors[2]),
-    makeSeries(t("Cache"), values.cache, colors[3]),
-    makeSeries(t("Cost"), values.cost, colors[4], 2.5)
-  ];
-  const visibleSeries = trendFilter === "cost" ? [series[4]] : trendFilter === "tokens" ? series.slice(0, 4) : series;
+
+  let visibleSeries: any[] = [];
+  const isRatio = trendFilter.endsWith("-ratio");
+
+  if (trendFilter === "token-ratio") {
+    const tokenRatioValues = {
+      input: processedPoints.map((point) => {
+        const total = point.inputTokens + point.outputTokens + point.cacheReadTokens + point.cacheWriteTokens;
+        return total > 0 ? Number(((point.inputTokens / total) * 100).toFixed(1)) : 0;
+      }),
+      output: processedPoints.map((point) => {
+        const total = point.inputTokens + point.outputTokens + point.cacheReadTokens + point.cacheWriteTokens;
+        return total > 0 ? Number(((point.outputTokens / total) * 100).toFixed(1)) : 0;
+      }),
+      cache: processedPoints.map((point) => {
+        const total = point.inputTokens + point.outputTokens + point.cacheReadTokens + point.cacheWriteTokens;
+        const cacheVal = point.cacheReadTokens + point.cacheWriteTokens;
+        return total > 0 ? Number(((cacheVal / total) * 100).toFixed(1)) : 0;
+      })
+    };
+    visibleSeries = [
+      makeSeries(t("Input ratio"), tokenRatioValues.input, colors[1]),
+      makeSeries(t("Output ratio"), tokenRatioValues.output, colors[2]),
+      makeSeries(t("Cache ratio"), tokenRatioValues.cache, colors[3])
+    ];
+  } else if (trendFilter === "cost-ratio") {
+    const costRatioValues = {
+      input: processedPoints.map((point) => {
+        const inputC = point.inputCostUsd ?? 0;
+        const outputC = point.outputCostUsd ?? 0;
+        const cacheC = point.cacheCostUsd ?? 0;
+        const total = inputC + outputC + cacheC;
+        return total > 0 ? Number(((inputC / total) * 100).toFixed(1)) : 0;
+      }),
+      output: processedPoints.map((point) => {
+        const inputC = point.inputCostUsd ?? 0;
+        const outputC = point.outputCostUsd ?? 0;
+        const cacheC = point.cacheCostUsd ?? 0;
+        const total = inputC + outputC + cacheC;
+        return total > 0 ? Number(((outputC / total) * 100).toFixed(1)) : 0;
+      }),
+      cache: processedPoints.map((point) => {
+        const inputC = point.inputCostUsd ?? 0;
+        const outputC = point.outputCostUsd ?? 0;
+        const cacheC = point.cacheCostUsd ?? 0;
+        const total = inputC + outputC + cacheC;
+        return total > 0 ? Number(((cacheC / total) * 100).toFixed(1)) : 0;
+      })
+    };
+    visibleSeries = [
+      makeSeries(t("Input cost ratio"), costRatioValues.input, colors[1]),
+      makeSeries(t("Output cost ratio"), costRatioValues.output, colors[2]),
+      makeSeries(t("Cache cost ratio"), costRatioValues.cache, colors[3])
+    ];
+  } else if (trendFilter === "app-ratio") {
+    const allTools = Array.from(
+      new Set(processedPoints.flatMap((point) => (point.toolUsages || []).map((u) => u.toolSlug)))
+    ).sort();
+
+    const toolNames: Record<string, string> = {};
+    for (const point of processedPoints) {
+      for (const usage of point.toolUsages || []) {
+        toolNames[usage.toolSlug] = usage.toolName;
+      }
+    }
+
+    visibleSeries = allTools.map((toolSlug, idx) => {
+      const toolValues = processedPoints.map((point) => {
+        const usages = point.toolUsages || [];
+        const target = usages.find((u) => u.toolSlug === toolSlug);
+        const totalCost = usages.reduce((sum, u) => sum + u.costUsd, 0);
+        return totalCost > 0 && target ? Number(((target.costUsd / totalCost) * 100).toFixed(1)) : 0;
+      });
+      const color = colors[idx % colors.length];
+      return makeSeries(toolNames[toolSlug] || toolSlug, toolValues, color);
+    });
+
+    if (visibleSeries.length === 0) {
+      visibleSeries = [makeSeries(t("No applications"), processedPoints.map(() => 0), colors[0])];
+    }
+  } else {
+    const values = {
+      total: processedPoints.map((point) => point.totalTokens),
+      input: processedPoints.map((point) => point.inputTokens),
+      output: processedPoints.map((point) => point.outputTokens),
+      cache: processedPoints.map((point) => point.cacheReadTokens + point.cacheWriteTokens),
+      cost: processedPoints.map((point) => point.costUsd)
+    };
+    const series = [
+      makeSeries(t("Total tokens"), values.total, colors[0], 3),
+      makeSeries(t("Input"), values.input, colors[1]),
+      makeSeries(t("Output"), values.output, colors[2]),
+      makeSeries(t("Cache"), values.cache, colors[3]),
+      makeSeries(t("Cost"), values.cost, colors[4], 2.5)
+    ];
+    visibleSeries = trendFilter === "cost" ? [series[4]] : trendFilter === "tokens" ? series.slice(0, 4) : series;
+  }
 
   return {
     backgroundColor: theme === "dark" ? "#0d1b2e" : "#ffffff",
@@ -140,7 +260,8 @@ export function createTrendChartOption(
       trigger: "axis",
       backgroundColor: theme === "dark" ? "#0d213f" : "#ffffff",
       borderColor: axisLineColor,
-      textStyle: { color: theme === "dark" ? "#f5f7fa" : "#0b1830" }
+      textStyle: { color: theme === "dark" ? "#f5f7fa" : "#0b1830" },
+      valueFormatter: isRatio ? (value: any) => `${value}%` : undefined
     },
     legend: { top: 0, right: 0, textStyle: { color: textColor } },
     xAxis: {
@@ -152,7 +273,11 @@ export function createTrendChartOption(
     },
     yAxis: {
       type: "value",
-      axisLabel: { color: textColor, formatter: (value: number) => compactNumber(value, language) },
+      max: isRatio ? 100 : undefined,
+      axisLabel: {
+        color: textColor,
+        formatter: (value: number) => isRatio ? `${value}%` : compactNumber(value, language)
+      },
       splitLine: { lineStyle: { color: splitLineColor } }
     },
     series: visibleSeries

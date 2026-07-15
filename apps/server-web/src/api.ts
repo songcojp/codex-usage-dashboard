@@ -14,6 +14,15 @@ export type UsageSummary = {
 
 export type TrendPoint = UsageSummary & {
   day: string;
+  inputCostUsd?: number;
+  outputCostUsd?: number;
+  cacheCostUsd?: number;
+  toolUsages?: Array<{
+    toolSlug: string;
+    toolName: string;
+    totalTokens: number;
+    costUsd: number;
+  }>;
 };
 
 export type UsageEvent = UsageSummary & {
