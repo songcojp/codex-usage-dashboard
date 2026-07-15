@@ -37,7 +37,9 @@ target_psql() {
 
 source_psql -f - < "$repo_root/apps/server/src/db/migrations/0001_initial.sql"
 source_psql -f - < "$repo_root/scripts/fixtures/legacy-migration-source.sql"
-target_psql -f - < "$repo_root/apps/server/src/db/migrations/0001_initial.sql"
+for migration in "$repo_root"/apps/server/src/db/migrations/*.sql; do
+  target_psql -f - < "$migration"
+done
 target_psql -f - < "$repo_root/scripts/fixtures/migration-target-bookkeeping.sql"
 
 LEGACY_CODEX_OTHER_SLUGS=codex-private-legacy \
@@ -46,6 +48,7 @@ LEGACY_CODEX_OTHER_SLUGS=codex-private-legacy \
   "$repo_root/scripts/migrate-legacy-data.sh" "$source_dir" "$target_dir" "$backup_dir"
 
 [[ "$(target_psql -c 'SELECT count(*) FROM usage_events')" == "5" ]]
+[[ "$(target_psql -c "SELECT count(*) FROM usage_events WHERE task_id = 'fallback:' || device_id::text")" == "5" ]]
 [[ "$(target_psql -c "SELECT input_tokens || '|' || output_tokens || '|' || cache_read_tokens || '|' || cache_write_tokens || '|' || total_tokens || '|' || cost_usd FROM (SELECT sum(input_tokens) AS input_tokens, sum(output_tokens) AS output_tokens, sum(cache_read_tokens) AS cache_read_tokens, sum(cache_write_tokens) AS cache_write_tokens, sum(total_tokens) AS total_tokens, sum(cost_usd) AS cost_usd FROM usage_events) totals")" == "150|15|20|25|210|1.5" ]]
 [[ "$(target_psql -c "SELECT string_agg(slug || '=' || event_count, ',' ORDER BY slug) FROM (SELECT tools.slug, count(*) AS event_count FROM usage_events JOIN tools ON tools.id = usage_events.tool_id GROUP BY tools.slug) grouped")" == "codex-cli=1,codex-desktop=1,codex-vscode-plugin=1,other=2" ]]
 [[ "$(target_psql -c "SELECT count(*) FROM devices WHERE id = '20000000-0000-4000-8000-000000000002'")" == "0" ]]
