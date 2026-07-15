@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import {
+  createProjectRatioResponse,
   mergeProjectRowsByRepoHash,
+  mergeProjectRatioRows,
   reportingDaySql,
   reportingDayUtcRange
 } from "./queries.js";
@@ -38,6 +40,92 @@ describe("reportingDaySql", () => {
 });
 
 describe("admin project query helpers", () => {
+  it("shapes daily and all-time project ratio aggregates", () => {
+    expect(
+      createProjectRatioResponse(
+        [
+          {
+            day: "2026-07-15",
+            id: "project-a",
+            displayName: "Dashboard",
+            repoHash: "repo-hash",
+            totalTokens: "20"
+          }
+        ],
+        [
+          {
+            day: "",
+            id: "project-a",
+            displayName: "Dashboard",
+            repoHash: "repo-hash",
+            totalTokens: "40"
+          }
+        ]
+      )
+    ).toEqual({
+      daily: [
+        {
+          day: "2026-07-15",
+          projects: [
+            {
+              projectKey: "repo:repo-hash",
+              projectName: "Dashboard",
+              totalTokens: 20
+            }
+          ]
+        }
+      ],
+      total: [
+        {
+          projectKey: "repo:repo-hash",
+          projectName: "Dashboard",
+          totalTokens: 40
+        }
+      ]
+    });
+  });
+
+  it("merges project ratio rows by day and repository identity", () => {
+    expect(
+      mergeProjectRatioRows([
+        {
+          day: "2026-07-14",
+          id: "project-a",
+          displayName: "Dashboard",
+          repoHash: "repo-hash",
+          totalTokens: "20"
+        },
+        {
+          day: "2026-07-14",
+          id: "project-b",
+          displayName: "Dashboard",
+          repoHash: "repo-hash",
+          totalTokens: "30"
+        },
+        {
+          day: "2026-07-15",
+          id: "project-c",
+          displayName: "Standalone",
+          repoHash: null,
+          totalTokens: "10"
+        }
+      ])
+    ).toEqual([
+      {
+        day: "2026-07-14",
+        projectKey: "repo:repo-hash",
+        projectName: "Dashboard",
+        totalTokens: 50
+      },
+      {
+        day: "2026-07-15",
+        projectKey: "project:project-c",
+        projectName: "Standalone",
+        totalTokens: 10
+      }
+    ]);
+  });
+
   it("aggregates project totals by repo hash across local paths", () => {
     const rows = mergeProjectRowsByRepoHash([
       {
