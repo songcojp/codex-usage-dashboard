@@ -92,3 +92,13 @@ test("deployment health check probes the server container instead of the public 
     /docker compose .* exec -T server node -e .*http:\/\/localhost:3000\/api\/health/
   );
 });
+
+test("deployment smoke-tests the production task query after migrations", async () => {
+  const source = await readFile(deployScript, "utf8");
+  const remoteScript = source.split("<<'REMOTE_SCRIPT'")[1];
+  assert.ok(remoteScript);
+  assert.match(remoteScript, /createAdminQueryService/);
+  assert.match(remoteScript, /getTasks/);
+  assert.match(remoteScript, /sortBy: 'lastActivityAt'/);
+  assert.match(remoteScript, /timeZone: 'Asia\/Tokyo'/);
+});

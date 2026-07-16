@@ -70,6 +70,7 @@ fi
 # the remaining deployment commands from the shared standard input.
 docker compose --env-file .env -f "$compose_file" up -d --build < /dev/null
 docker compose --env-file .env -f "$compose_file" exec -T server node apps/server/dist/db/migrate.js < /dev/null
+docker compose --env-file .env -f "$compose_file" exec -T server node --input-type=module -e "const { createAdminQueryService } = await import('./apps/server/dist/admin/queries.js'); await createAdminQueryService().getTasks({ from: '2026-07-03', to: '2026-07-16', timeZone: 'Asia/Tokyo', limit: 25, offset: 0, sortBy: 'lastActivityAt', sortDir: 'desc' }); process.exit(0);" < /dev/null
 
 for attempt in $(seq 1 30); do
   if docker compose --env-file .env -f "$compose_file" exec -T server node -e "const res = await fetch('http://localhost:3000/api/health'); if (!res.ok) process.exit(1);" < /dev/null >/dev/null 2>&1; then
