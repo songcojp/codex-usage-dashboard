@@ -332,7 +332,9 @@ export async function runWatcherCycle(input: {
   const finalState = await readAgentState(input.statePath);
   finalState.queueDepth = input.queue.depth;
   finalState.taskNamesDiscovered = taskSync.discovered;
-  finalState.taskNamesAcknowledged = taskSync.acknowledged;
+  if (!taskSync.errorCategory) {
+    finalState.taskNamesAcknowledged = Math.max(0, taskSync.discovered - taskSync.rejected);
+  }
   if (taskSync.attempted && taskSync.status !== null &&
       taskSync.status >= 200 && taskSync.status < 300 &&
       !taskSync.errorCategory) {
@@ -345,8 +347,8 @@ export async function runWatcherCycle(input: {
       : null;
   if (uploadErrorCategory || responseError) {
     finalState.lastErrorCategory = uploadErrorCategory ?? responseError;
-    await writeAgentState(finalState, input.statePath);
   }
+  await writeAgentState(finalState, input.statePath);
   return {
     filesAdvanced,
     eventsQueued,

@@ -135,7 +135,19 @@ describe("watcher integration", () => {
       queuePath: path.join(dir, "queue.jsonl"),
       deadLetterPath: path.join(dir, "dead-letter.jsonl")
     });
-    const result = await runWatcherCycle({
+    const fetchImpl = async (url: URL | RequestInfo, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { events?: unknown[]; tasks?: unknown[] };
+      if (new URL(String(url)).pathname === "/api/ingest/tasks") {
+        return new Response(JSON.stringify({
+          inserted: body.tasks?.length ?? 0,
+          updated: 0,
+          stale: 0,
+          rejected: []
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ inserted: body.events?.length ?? 0, duplicates: 0, rejected: [] }), { status: 200 });
+    };
+    const watcherInput = {
       config: {
         serverUrl: "https://example.test",
         deviceToken: "token",
@@ -144,20 +156,12 @@ describe("watcher integration", () => {
       },
       statePath,
       queue,
-      reason: "startup",
       taskMetadataHomeDir: dir,
-      fetchImpl: async (url, init) => {
-        const body = JSON.parse(String(init?.body)) as { events?: unknown[]; tasks?: unknown[] };
-        if (new URL(String(url)).pathname === "/api/ingest/tasks") {
-          return new Response(JSON.stringify({
-            inserted: body.tasks?.length ?? 0,
-            updated: 0,
-            stale: 0,
-            rejected: []
-          }), { status: 200 });
-        }
-        return new Response(JSON.stringify({ inserted: body.events?.length ?? 0, duplicates: 0, rejected: [] }), { status: 200 });
-      }
+      fetchImpl
+    } as const;
+    const result = await runWatcherCycle({
+      ...watcherInput,
+      reason: "startup"
     });
 
     expect(result).toMatchObject({
@@ -170,9 +174,17 @@ describe("watcher integration", () => {
       taskNamesRejected: 0
     });
     expect(queue.depth).toBe(0);
-    const state = await readAgentState(statePath);
+    let state = await readAgentState(statePath);
     expect(Object.values(state.files)[0]).toMatchObject({ nextLineNumber: 2 });
     expect(state.lastReconciliationAt).not.toBeNull();
+    expect(state.taskNamesAcknowledged).toBe(1);
+
+    await runWatcherCycle({
+      ...watcherInput,
+      reason: "filesystem"
+    });
+    state = await readAgentState(statePath);
+    expect(state.taskNamesAcknowledged).toBe(1);
   });
 });
 
