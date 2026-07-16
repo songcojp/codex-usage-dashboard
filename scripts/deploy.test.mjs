@@ -61,6 +61,13 @@ test("compose can select the private-IP Caddy configuration", async () => {
   assert.doesNotMatch(privateCaddyfile, /\b(?:\d{1,3}\.){3}\d{1,3}\b/);
 });
 
+test("runtime image skips install scripts from unused workspaces", async () => {
+  const dockerfile = await readFile(path.join(repoRoot, "deploy", "Dockerfile"), "utf8");
+  const runtimeStage = dockerfile.split("FROM node:20-bookworm-slim AS runtime")[1];
+  assert.ok(runtimeStage);
+  assert.match(runtimeStage, /npm ci --omit=dev --ignore-scripts/);
+});
+
 test("deployment removes stale tracked files without deleting protected environment files", async () => {
   const source = await readFile(deployScript, "utf8");
   assert.match(source, /rsync -az --delete-delay/);

@@ -31,7 +31,7 @@ COPY apps/server-web/package.json apps/server-web/package.json
 COPY apps/agent/package.json apps/agent/package.json
 COPY packages/shared/package.json packages/shared/package.json
 
-RUN npm ci --omit=dev \
+RUN npm ci --omit=dev --ignore-scripts \
   --workspace @codex-usage-dashboard/server \
   --workspace @codex-usage-dashboard/shared \
   --include-workspace-root=false \
