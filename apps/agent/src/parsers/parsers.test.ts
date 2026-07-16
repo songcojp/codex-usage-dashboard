@@ -132,6 +132,67 @@ describe("Codex parser adapters", () => {
     expect(desktop[0]?.toolSlug).not.toBe("codex-vscode-plugin");
   });
 
+  it("attributes subagent usage to its parent task while keeping child session identity", async () => {
+    const timestamp = "2026-05-30T07:00:03.000Z";
+    const childEvents = await parseCodexFile(
+      await writeFixture("subagent.jsonl", [
+        {
+          timestamp,
+          type: "session_meta",
+          payload: {
+            id: "child-session",
+            cwd: "/workspace/projects/example",
+            source: {
+              subagent: {
+                thread_spawn: {
+                  parent_thread_id: "parent-task",
+                  depth: 1,
+                  agent_path: "/root/review",
+                  agent_nickname: "Reviewer",
+                  agent_role: "worker"
+                }
+              }
+            },
+            originator: "Codex Desktop"
+          }
+        },
+        {
+          timestamp,
+          type: "turn_context",
+          payload: { cwd: "/workspace/projects/example", model: "gpt-5.5" }
+        },
+        {
+          timestamp,
+          type: "event_msg",
+          payload: {
+            type: "token_count",
+            info: {
+              last_token_usage: {
+                input_tokens: 100,
+                cached_input_tokens: 25,
+                output_tokens: 40,
+                total_tokens: 140
+              }
+            }
+          }
+        }
+      ].map(JSON.stringify).join("\n"))
+    );
+    const parentEvents = await parseCodexFile(
+      await writeFixture(
+        "parent.jsonl",
+        currentSession({ source: "vscode", originator: "Codex Desktop" })
+      )
+    );
+
+    expect(childEvents).toMatchObject([{
+      taskId: "parent-task",
+      sourceSessionId: "child-session",
+      toolSlug: "codex-desktop"
+    }]);
+    expect(childEvents[0]?.sourceEventId).not.toBe(parentEvents[0]?.sourceEventId);
+  });
+
   it("classifies current session events with an unknown origin as other", async () => {
     const events = await parseCodexFile(
       await writeFixture(

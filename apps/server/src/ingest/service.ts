@@ -5,7 +5,7 @@ import {
   type IngestBatch,
   type UsageEventDraft
 } from "@codex-usage-dashboard/shared";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { createDb, type TokenReportDb } from "../db/client.js";
 import { initialTools } from "../db/seed-tools.js";
 import { dailyUsageRollups, devices, modelPrices, projects, tools, usageEvents } from "../db/schema.js";
@@ -200,6 +200,19 @@ export function fallbackTaskId(deviceId: string): string {
   return `fallback:${deviceId}`;
 }
 
+export function taskReassignmentCandidates(
+  event: Pick<PersistableUsageEvent, "deviceId" | "taskId" | "sourceSessionId">
+): string[] {
+  const fallback = fallbackTaskId(event.deviceId);
+  if (event.taskId === fallback) return [];
+
+  const candidates = [fallback];
+  if (event.sourceSessionId && event.sourceSessionId !== event.taskId) {
+    candidates.push(event.sourceSessionId);
+  }
+  return candidates;
+}
+
 export function validateBatch(input: unknown): IngestBatch {
   const batch = parseBatch(input);
 
@@ -366,8 +379,8 @@ export function createDrizzleIngestStore(db: DrizzleIngestDb): IngestStore {
     },
 
     async enrichUsageEventTask(event) {
-      const fallback = fallbackTaskId(event.deviceId);
-      if (event.taskId === fallback) return;
+      const candidates = taskReassignmentCandidates(event);
+      if (candidates.length === 0) return;
 
       await db
         .update(usageEvents)
@@ -377,7 +390,7 @@ export function createDrizzleIngestStore(db: DrizzleIngestDb): IngestStore {
             eq(usageEvents.deviceId, event.deviceId),
             eq(usageEvents.toolId, event.toolId),
             eq(usageEvents.sourceEventId, event.sourceEventId),
-            eq(usageEvents.taskId, fallback)
+            inArray(usageEvents.taskId, candidates)
           )
         );
     },

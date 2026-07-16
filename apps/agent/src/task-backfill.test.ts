@@ -52,6 +52,32 @@ describe("task ID backfill", () => {
     expect(result.batchesSubmitted).toBe(2);
   });
 
+  it("replays subagent usage under the parent task with child-session evidence", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "task-backfill-subagent-"));
+    await fs.writeFile(path.join(dir, "session.jsonl"), subagentSessionLog());
+    const uploaded: Array<{
+      events: Array<{ taskId?: string | null; sourceSessionId?: string }>;
+    }> = [];
+    const fetchImpl = vi.fn(async (_url: URL | RequestInfo, init?: RequestInit) => {
+      const batch = JSON.parse(String(init?.body)) as {
+        events: Array<{ taskId?: string | null; sourceSessionId?: string }>;
+      };
+      uploaded.push(batch);
+      return new Response(JSON.stringify({
+        inserted: 0,
+        duplicates: batch.events.length,
+        rejected: []
+      }), { status: 200 });
+    }) as typeof fetch;
+
+    await backfillTaskIds({ config: config(dir), confirm: true, fetchImpl });
+
+    expect(uploaded.flatMap((batch) => batch.events)).toMatchObject([{
+      taskId: "parent-task",
+      sourceSessionId: "child-session"
+    }]);
+  });
+
   it("counts malformed and unattributed records while dry-run performs no upload", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "task-backfill-dry-"));
     const invalidToken = JSON.stringify({
@@ -113,4 +139,48 @@ function sessionLog(taskId: string, eventCount: number): string {
     });
   }
   return `${records.map(JSON.stringify).join("\n")}\n`;
+}
+
+function subagentSessionLog(): string {
+  return `${[
+    {
+      timestamp: "2026-05-30T00:00:00.000Z",
+      type: "session_meta",
+      payload: {
+        id: "child-session",
+        cwd: "/workspace/example",
+        source: {
+          subagent: {
+            thread_spawn: {
+              parent_thread_id: "parent-task",
+              depth: 1,
+              agent_path: "/root/review",
+              agent_nickname: "Reviewer",
+              agent_role: "worker"
+            }
+          }
+        },
+        originator: "Codex Desktop"
+      }
+    },
+    {
+      timestamp: "2026-05-30T00:00:00.000Z",
+      type: "turn_context",
+      payload: { cwd: "/workspace/example", model: "gpt-5" }
+    },
+    {
+      timestamp: "2026-05-30T00:00:01.000Z",
+      type: "event_msg",
+      payload: {
+        type: "token_count",
+        info: {
+          last_token_usage: {
+            input_tokens: 2,
+            cached_input_tokens: 1,
+            output_tokens: 1
+          }
+        }
+      }
+    }
+  ].map(JSON.stringify).join("\n")}\n`;
 }
