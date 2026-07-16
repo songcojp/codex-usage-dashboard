@@ -4,6 +4,7 @@ import {
   createProjectRatioResponse,
   mergeProjectRowsByRepoHash,
   mergeProjectRatioRows,
+  normalizeTaskRow,
   reportingDaySql,
   reportingDayUtcRange
 } from "./queries.js";
@@ -166,5 +167,48 @@ describe("admin project query helpers", () => {
       eventCount: 3
     });
     expect(rows[0]?.updatedAt).toEqual(new Date("2026-05-04T00:00:00.000Z"));
+  });
+});
+
+describe("admin task query helpers", () => {
+  it("normalizes aggregate values and identifies fallback tasks", () => {
+    expect(
+      normalizeTaskRow({
+        taskId: "fallback:device-a",
+        startedAt: new Date("2026-07-15T10:00:00.000Z"),
+        lastActivityAt: new Date("2026-07-15T11:00:00.000Z"),
+        deviceId: "device-a",
+        deviceName: "Device A",
+        deviceCount: "1",
+        projectId: null,
+        projectName: null,
+        projectCount: "2",
+        eventCount: "3",
+        inputTokens: "10",
+        outputTokens: "2",
+        cacheReadTokens: "3",
+        cacheWriteTokens: "1",
+        totalTokens: "16",
+        costUsd: "0.1"
+      })
+    ).toEqual({
+      taskId: "fallback:device-a",
+      isFallback: true,
+      startedAt: new Date("2026-07-15T10:00:00.000Z"),
+      lastActivityAt: new Date("2026-07-15T11:00:00.000Z"),
+      deviceId: "device-a",
+      deviceName: "Device A",
+      deviceCount: 1,
+      projectId: null,
+      projectName: null,
+      projectCount: 2,
+      eventCount: 3,
+      inputTokens: 10,
+      outputTokens: 2,
+      cacheReadTokens: 3,
+      cacheWriteTokens: 1,
+      totalTokens: 16,
+      costUsd: 0.1
+    });
   });
 });

@@ -1,5 +1,19 @@
 import { generateToken, hashToken } from "@codex-usage-dashboard/shared";
-import { and, asc, count, desc, eq, gte, lte, or, sql, sum } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  countDistinct,
+  desc,
+  eq,
+  gte,
+  lte,
+  max,
+  min,
+  or,
+  sql,
+  sum
+} from "drizzle-orm";
 import { createDb, type TokenReportDb } from "../db/client.js";
 import { devices, modelPrices, projects, tools, usageEvents } from "../db/schema.js";
 import {
@@ -28,7 +42,15 @@ export type EventSortBy =
   | "cacheTokens"
   | "costUsd";
 export type ProjectSortBy = "eventCount" | "totalTokens" | "costUsd" | "updatedAt";
+export type TaskSortBy = "lastActivityAt" | "eventCount" | "totalTokens" | "costUsd";
 export type SortDir = "asc" | "desc";
+
+type TaskQuery = UsageFilters & {
+  limit?: number;
+  offset?: number;
+  sortBy?: TaskSortBy;
+  sortDir?: SortDir;
+};
 
 export type UsageSummary = {
   totalTokens: number;
@@ -66,6 +88,10 @@ export type AdminQueryService = {
   getEvents(
     filters: UsageFilters & { limit?: number; offset?: number; sortBy?: EventSortBy; sortDir?: SortDir }
   ): Promise<{
+    rows: Array<Record<string, unknown>>;
+    total: number;
+  }>;
+  getTasks(filters: TaskQuery): Promise<{
     rows: Array<Record<string, unknown>>;
     total: number;
   }>;
@@ -108,6 +134,25 @@ type ProjectRatioRow = {
   displayName: string;
   repoHash: string | null;
   totalTokens: string | number | null | undefined;
+};
+
+type TaskAggregateRow = {
+  taskId: string;
+  startedAt: Date;
+  lastActivityAt: Date;
+  deviceId: string | null;
+  deviceName: string | null;
+  deviceCount: string | number | null | undefined;
+  projectId: string | null;
+  projectName: string | null;
+  projectCount: string | number | null | undefined;
+  eventCount: string | number | null | undefined;
+  inputTokens: string | number | null | undefined;
+  outputTokens: string | number | null | undefined;
+  cacheReadTokens: string | number | null | undefined;
+  cacheWriteTokens: string | number | null | undefined;
+  totalTokens: string | number | null | undefined;
+  costUsd: string | number | null | undefined;
 };
 
 let defaultDb: TokenReportDb | undefined;
@@ -289,6 +334,82 @@ export function createAdminQueryService(db?: AdminDb): AdminQueryService {
       return {
         rows: rows.map((row) => ({ ...row, costUsd: numberFromAggregate(row.costUsd) })),
         total: totalRow?.total ?? 0
+      };
+    },
+
+    async getTasks(filters) {
+      const where = eventWhere(filters);
+      const taskGroups = adminDb()
+        .select({
+          taskId: usageEvents.taskId,
+          startedAt: min(usageEvents.occurredAt).as("started_at"),
+          lastActivityAt: max(usageEvents.occurredAt).as("last_activity_at"),
+          deviceCount: countDistinct(usageEvents.deviceId).as("device_count"),
+          deviceId:
+            sql<string | null>`case when count(distinct ${usageEvents.deviceId}) = 1 then min(${usageEvents.deviceId}::text) else null end`.as(
+              "device_id"
+            ),
+          projectCount: countDistinct(usageEvents.projectId).as("project_count"),
+          projectId:
+            sql<string | null>`case when count(distinct ${usageEvents.projectId}) = 1 then min(${usageEvents.projectId}::text) else null end`.as(
+              "project_id"
+            ),
+          eventCount: count().as("event_count"),
+          inputTokens: sum(usageEvents.inputTokens).as("input_tokens"),
+          outputTokens: sum(usageEvents.outputTokens).as("output_tokens"),
+          cacheReadTokens: sum(usageEvents.cacheReadTokens).as("cache_read_tokens"),
+          cacheWriteTokens: sum(usageEvents.cacheWriteTokens).as("cache_write_tokens"),
+          totalTokens: sum(usageEvents.totalTokens).as("total_tokens"),
+          costUsd: sql<string>`coalesce(sum(${usageEvents.costUsd}), 0)`.as("cost_usd")
+        })
+        .from(usageEvents)
+        .innerJoin(tools, eq(usageEvents.toolId, tools.id))
+        .where(where)
+        .groupBy(usageEvents.taskId)
+        .as("task_groups");
+      const sortColumn =
+        filters.sortBy === "eventCount"
+          ? taskGroups.eventCount
+          : filters.sortBy === "totalTokens"
+            ? taskGroups.totalTokens
+            : filters.sortBy === "costUsd"
+              ? taskGroups.costUsd
+              : taskGroups.lastActivityAt;
+      const orderBy = filters.sortDir === "asc" ? asc(sortColumn) : desc(sortColumn);
+      const rows = await adminDb()
+        .select({
+          taskId: taskGroups.taskId,
+          startedAt: taskGroups.startedAt,
+          lastActivityAt: taskGroups.lastActivityAt,
+          deviceId: taskGroups.deviceId,
+          deviceName: devices.name,
+          deviceCount: taskGroups.deviceCount,
+          projectId: taskGroups.projectId,
+          projectName: projects.displayName,
+          projectCount: taskGroups.projectCount,
+          eventCount: taskGroups.eventCount,
+          inputTokens: taskGroups.inputTokens,
+          outputTokens: taskGroups.outputTokens,
+          cacheReadTokens: taskGroups.cacheReadTokens,
+          cacheWriteTokens: taskGroups.cacheWriteTokens,
+          totalTokens: taskGroups.totalTokens,
+          costUsd: taskGroups.costUsd
+        })
+        .from(taskGroups)
+        .leftJoin(devices, sql`${devices.id} = ${taskGroups.deviceId}::uuid`)
+        .leftJoin(projects, sql`${projects.id} = ${taskGroups.projectId}::uuid`)
+        .orderBy(orderBy, asc(taskGroups.taskId))
+        .limit(clampLimit(filters.limit))
+        .offset(Math.max(0, filters.offset ?? 0));
+      const [totalRow] = await adminDb()
+        .select({ total: countDistinct(usageEvents.taskId) })
+        .from(usageEvents)
+        .innerJoin(tools, eq(usageEvents.toolId, tools.id))
+        .where(where);
+
+      return {
+        rows: rows.map((row) => normalizeTaskRow(row as TaskAggregateRow)),
+        total: numberFromAggregate(totalRow?.total)
       };
     },
 
@@ -583,6 +704,28 @@ export function createProjectRatioResponse(
   return {
     daily: [...daily].map(([day, projects]) => ({ day, projects })),
     total: mergeProjectRatioRows(totalRows).map(({ day: _day, ...project }) => project)
+  };
+}
+
+export function normalizeTaskRow(row: TaskAggregateRow) {
+  return {
+    taskId: row.taskId,
+    isFallback: row.taskId.startsWith("fallback:"),
+    startedAt: row.startedAt,
+    lastActivityAt: row.lastActivityAt,
+    deviceId: row.deviceId,
+    deviceName: row.deviceName,
+    deviceCount: numberFromAggregate(row.deviceCount),
+    projectId: row.projectId,
+    projectName: row.projectName,
+    projectCount: numberFromAggregate(row.projectCount),
+    eventCount: numberFromAggregate(row.eventCount),
+    inputTokens: numberFromAggregate(row.inputTokens),
+    outputTokens: numberFromAggregate(row.outputTokens),
+    cacheReadTokens: numberFromAggregate(row.cacheReadTokens),
+    cacheWriteTokens: numberFromAggregate(row.cacheWriteTokens),
+    totalTokens: numberFromAggregate(row.totalTokens),
+    costUsd: numberFromAggregate(row.costUsd)
   };
 }
 

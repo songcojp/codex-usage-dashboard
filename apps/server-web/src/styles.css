@@ -765,6 +765,16 @@ td {
   background: #fee2e2;
 }
 
+.status.fallback {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+[data-theme="dark"] .status.fallback {
+  color: #fbbf24;
+  background: rgba(146, 64, 14, 0.35);
+}
+
 [data-theme="dark"] .status.disabled {
   color: #f87171;
   background: rgba(153, 27, 27, 0.35);

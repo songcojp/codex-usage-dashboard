@@ -30,6 +30,7 @@ import {
   type Project,
   type ProjectSortBy,
   type SortDir,
+  type TaskSortBy,
   type TrendPoint,
   type UsageEvent,
   type UsageFilters
@@ -39,6 +40,7 @@ import { DataExplorer } from "./components/DataExplorer.js";
 import { FilterToolbar } from "./components/FilterToolbar.js";
 import { MetricsOverview } from "./components/MetricsOverview.js";
 import { TrendPanel } from "./components/TrendPanel.js";
+import { TasksTable } from "./components/TasksTable.js";
 import type {
   DashboardSection,
   DashboardTab as Tab,
@@ -47,6 +49,7 @@ import type {
   LanguageSetting,
   PriceDraft,
   ProjectSort,
+  TaskSort,
   Theme
 } from "./dashboard-types.js";
 import { translations } from "./locales/index.js";
@@ -54,6 +57,7 @@ import { translations } from "./locales/index.js";
 type AuthState = "checking" | "authenticated" | "anonymous";
 
 const eventPageLimit = 25;
+const taskPageLimit = 25;
 const emptyPriceDraft: PriceDraft = {
   model: "",
   inputCostPerMillionUsd: "0",
@@ -101,6 +105,8 @@ export function App() {
   const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
   const [eventOffset, setEventOffset] = useState(0);
   const [eventSort, setEventSort] = useState<EventSort>("occurredAt-desc");
+  const [taskOffset, setTaskOffset] = useState(0);
+  const [taskSort, setTaskSort] = useState<TaskSort>("lastActivityAt-desc");
   const [projectSort, setProjectSort] = useState<ProjectSort>("updatedAt-desc");
   const [priceDraft, setPriceDraft] = useState<PriceDraft>(emptyPriceDraft);
   const [loading, setLoading] = useState(false);
@@ -197,7 +203,8 @@ export function App() {
       const nextData = await getDashboardData(
         { from, to, tool, deviceId, projectId, model, timeZone },
         { limit: eventPageLimit, offset: eventOffset, ...eventSortToRequest(eventSort) },
-        projectSortToRequest(projectSort)
+        projectSortToRequest(projectSort),
+        { limit: taskPageLimit, offset: taskOffset, ...taskSortToRequest(taskSort) }
       );
       setData(nextData);
     } catch (caught) {
@@ -210,7 +217,7 @@ export function App() {
     } finally {
       setLoading(false);
     }
-  }, [clearAuth, deviceId, eventOffset, eventSort, from, model, projectId, projectSort, t, timeZone, to, tool]);
+  }, [clearAuth, deviceId, eventOffset, eventSort, from, model, projectId, projectSort, t, taskOffset, taskSort, timeZone, to, tool]);
 
   const refreshSummary = useCallback(async () => {
     try {
@@ -338,7 +345,7 @@ export function App() {
         deviceOptions={data?.deviceOptions.rows ?? data?.devices.rows ?? []}
         filters={filters}
         modelOptions={modelOptions}
-        onChange={(key, value) => updateFilter(setFilters, setEventOffset, key, value)}
+        onChange={(key, value) => updateFilter(setFilters, setEventOffset, setTaskOffset, key, value)}
         projectOptions={data?.projectOptions.rows ?? data?.projects.rows ?? []}
         t={t}
         timeZoneOptions={reportingTimeZoneOptions}
@@ -382,6 +389,22 @@ export function App() {
             }}
             onPrevious={() => setEventOffset((current) => Math.max(0, current - eventPageLimit))}
             onNext={() => setEventOffset((current) => current + eventPageLimit)}
+            t={t}
+          />
+        ) : null}
+        {activeTab === "tasks" ? (
+          <TasksTable
+            rows={data?.tasks.rows ?? []}
+            total={data?.tasks.total ?? 0}
+            limit={taskPageLimit}
+            offset={taskOffset}
+            sort={taskSort}
+            onSortChange={(nextSort) => {
+              setTaskOffset(0);
+              setTaskSort(nextSort);
+            }}
+            onPrevious={() => setTaskOffset((current) => Math.max(0, current - taskPageLimit))}
+            onNext={() => setTaskOffset((current) => current + taskPageLimit)}
             t={t}
           />
         ) : null}
@@ -1420,10 +1443,12 @@ function isUnauthorized(value: unknown): boolean {
 function updateFilter(
   setFilters: Dispatch<SetStateAction<UsageFilters>>,
   setEventOffset: Dispatch<SetStateAction<number>>,
+  setTaskOffset: Dispatch<SetStateAction<number>>,
   key: keyof UsageFilters,
   value: string | undefined
 ): void {
   setEventOffset(0);
+  setTaskOffset(0);
   setFilters((current) => ({ ...current, [key]: value }));
 }
 
@@ -1444,6 +1469,11 @@ function eventSortToRequest(sort: EventSort): { sortBy: EventSortBy; sortDir: So
 
 function projectSortToRequest(sort: ProjectSort): { sortBy: ProjectSortBy; sortDir: SortDir } {
   const [sortBy, sortDir] = sort.split("-") as [ProjectSortBy, SortDir];
+  return { sortBy, sortDir };
+}
+
+function taskSortToRequest(sort: TaskSort): { sortBy: TaskSortBy; sortDir: SortDir } {
+  const [sortBy, sortDir] = sort.split("-") as [TaskSortBy, SortDir];
   return { sortBy, sortDir };
 }
 

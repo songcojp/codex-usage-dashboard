@@ -1,4 +1,4 @@
-export type DashboardTab = "events" | "devices" | "projects" | "prices";
+export type DashboardTab = "events" | "tasks" | "devices" | "projects" | "prices";
 export type DashboardSection = "overview" | "trend" | "explorer";
 export type Theme = "light" | "dark";
 export type Language = "zh" | "ja" | "en" | "ko";
@@ -22,6 +22,16 @@ export type EventSort =
 export type ProjectSort =
   | "updatedAt-desc"
   | "updatedAt-asc"
+  | "eventCount-desc"
+  | "eventCount-asc"
+  | "totalTokens-desc"
+  | "totalTokens-asc"
+  | "costUsd-desc"
+  | "costUsd-asc";
+
+export type TaskSort =
+  | "lastActivityAt-desc"
+  | "lastActivityAt-asc"
   | "eventCount-desc"
   | "eventCount-asc"
   | "totalTokens-desc"
