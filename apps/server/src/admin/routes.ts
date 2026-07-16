@@ -11,6 +11,7 @@ import {
   type EventSortBy,
   type ProjectSortBy,
   type SortDir,
+  type TaskSortBy,
   type UsageFilters
 } from "./queries.js";
 import {
@@ -125,6 +126,26 @@ export async function registerAdminRoutes(
     }
 
     return queryService.getEvents({
+      ...filters,
+      ...pagination,
+      ...sort
+    });
+  });
+
+  app.get("/api/admin/tasks", async (request, reply) => {
+    if (!requireAdmin(request, reply, env)) return;
+    const filters = parseUsageFilters(request.query);
+    if (!filters) {
+      return reply.code(400).send({ error: "invalid filters" });
+    }
+    const query = request.query as Record<string, unknown>;
+    const pagination = parsePagination(query);
+    const sort = parseTaskSort(query);
+    if (!pagination || !sort) {
+      return reply.code(400).send({ error: "invalid filters" });
+    }
+
+    return queryService.getTasks({
       ...filters,
       ...pagination,
       ...sort
@@ -461,6 +482,27 @@ function parseEventSort(query: Record<string, unknown>): { sortBy?: EventSortBy;
 
 function isEventSortBy(value: string): value is EventSortBy {
   return ["occurredAt", "totalTokens", "inputTokens", "outputTokens", "cacheTokens", "costUsd"].includes(value);
+}
+
+function parseTaskSort(query: Record<string, unknown>): { sortBy?: TaskSortBy; sortDir?: SortDir } | null {
+  const sortBy = optionalString(query.sortBy);
+  const sortDir = optionalString(query.sortDir);
+
+  if (sortBy && !isTaskSortBy(sortBy)) {
+    return null;
+  }
+  if (sortDir && !isSortDir(sortDir)) {
+    return null;
+  }
+
+  return {
+    sortBy: sortBy ? (sortBy as TaskSortBy) : undefined,
+    sortDir: sortDir ? (sortDir as SortDir) : undefined
+  };
+}
+
+function isTaskSortBy(value: string): value is TaskSortBy {
+  return ["lastActivityAt", "eventCount", "totalTokens", "costUsd"].includes(value);
 }
 
 function parseProjectSort(query: Record<string, unknown>): { sortBy?: ProjectSortBy; sortDir?: SortDir } | null {

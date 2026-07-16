@@ -37,6 +37,9 @@ function createQueryService(): AdminQueryService {
     async getEvents() {
       return { rows: [], total: 0 };
     },
+    async getTasks() {
+      return { rows: [], total: 0 };
+    },
     async listDevices() {
       return { rows: [] };
     },
@@ -555,6 +558,78 @@ describe("admin routes", () => {
         sortBy: "cacheTokens",
         sortDir: "asc"
       });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("passes filters, pagination, and sort parameters to the tasks query", async () => {
+    let seenInput;
+    const queryService = createQueryService();
+    queryService.getTasks = async (input) => {
+      seenInput = input;
+      return { rows: [{ taskId: "task-1" }], total: 1 };
+    };
+    const app = await buildApp({ adminQueryService: queryService, env });
+
+    try {
+      const loginResponse = await app.inject({
+        method: "POST",
+        url: "/api/admin/login",
+        payload: { email: "admin@example.com", password: "secret" }
+      });
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/admin/tasks?from=2026-05-01&to=2026-05-30&deviceId=${validDeviceId}&limit=25&offset=50&sortBy=totalTokens&sortDir=asc`,
+        headers: {
+          cookie: loginResponse.cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ")
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ rows: [{ taskId: "task-1" }], total: 1 });
+      expect(seenInput).toMatchObject({
+        ...filters,
+        timeZone: "Asia/Tokyo",
+        deviceId: validDeviceId,
+        limit: 25,
+        offset: 50,
+        sortBy: "totalTokens",
+        sortDir: "asc"
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("returns 400 for unsupported task pagination or sort parameters", async () => {
+    let called = false;
+    const queryService = createQueryService();
+    queryService.getTasks = async () => {
+      called = true;
+      return { rows: [], total: 0 };
+    };
+    const app = await buildApp({ adminQueryService: queryService, env });
+
+    try {
+      const loginResponse = await app.inject({
+        method: "POST",
+        url: "/api/admin/login",
+        payload: { email: "admin@example.com", password: "secret" }
+      });
+      const cookie = loginResponse.cookies.map((item) => `${item.name}=${item.value}`).join("; ");
+
+      for (const url of [
+        "/api/admin/tasks?from=2026-05-01&to=2026-05-30&limit=bad",
+        "/api/admin/tasks?from=2026-05-01&to=2026-05-30&sortBy=model",
+        "/api/admin/tasks?from=2026-05-01&to=2026-05-30&sortDir=sideways"
+      ]) {
+        const response = await app.inject({ method: "GET", url, headers: { cookie } });
+        expect(response.statusCode).toBe(400);
+        expect(response.json()).toEqual({ error: "invalid filters" });
+      }
+
+      expect(called).toBe(false);
     } finally {
       await app.close();
     }
