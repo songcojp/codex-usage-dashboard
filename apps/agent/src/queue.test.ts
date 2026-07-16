@@ -80,8 +80,10 @@ describe("queue", () => {
     await queue.enqueue([draft("one")]);
     await expect(queue.enqueue([draft("two")])).rejects.toThrow(/queue size limit/);
 
-    expect((await fs.stat(paths.queuePath)).mode & 0o777).toBe(0o600);
-    expect((await fs.stat(path.dirname(paths.queuePath))).mode & 0o777).toBe(0o700);
+    if (process.platform !== "win32") {
+      expect((await fs.stat(paths.queuePath)).mode & 0o777).toBe(0o600);
+      expect((await fs.stat(path.dirname(paths.queuePath))).mode & 0o777).toBe(0o700);
+    }
   });
 });
 

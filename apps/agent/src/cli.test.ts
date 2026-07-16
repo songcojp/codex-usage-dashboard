@@ -30,7 +30,10 @@ describe("watcher-only CLI", () => {
       lastReconciliationAt: null,
       trackedFiles: 1,
       queueDepth: 3,
-      lastErrorCategory: "network"
+      lastErrorCategory: "network",
+      taskNamesDiscovered: 0,
+      taskNamesAcknowledged: 0,
+      lastTaskMetadataUploadAt: null
     });
   });
 
@@ -50,6 +53,8 @@ describe("watcher-only CLI", () => {
     });
     expect(result.archivePath).toContain("state.2026-07-14T00-00-00-000Z.bak");
     expect(await fs.readFile(queuePath, "utf8")).toBe("queued\n");
-    expect((await fs.stat(result.archivePath)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") {
+      expect((await fs.stat(result.archivePath)).mode & 0o777).toBe(0o600);
+    }
   });
 });
