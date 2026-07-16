@@ -13,6 +13,7 @@ function Fixture({ priceError }: { priceError?: string }) {
       onTabChange={setActiveTab}
       priceError={priceError}
       renderPanel={(tab) => {
+        if (tab === "tasks") return <span>Task A</span>;
         if (tab === "projects") return <><label>Sort<select><option>Newest</option></select></label><span>Project A</span></>;
         if (tab === "prices") return <form aria-label="Model prices"><input value="gpt-5" readOnly /></form>;
         return <span>{tab === "events" ? "Event A" : "Device A"}</span>;
@@ -29,6 +30,8 @@ describe("DataExplorer", () => {
     render(<Fixture />);
     expect(screen.getAllByRole("tablist")).toHaveLength(1);
     expect(screen.getByRole("tab", { name: "Events" }).getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(screen.getByRole("tab", { name: "Tasks" }));
+    expect(screen.getByText("Task A")).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "Projects" }));
     expect(screen.getByLabelText("Sort")).toBeTruthy();
     expect(screen.getByText("Project A")).toBeTruthy();

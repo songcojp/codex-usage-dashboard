@@ -138,6 +138,23 @@ describe("admin dashboard rendering", () => {
     );
     expect((screen.getByRole("button", { name: "Next" }) as HTMLButtonElement).disabled).toBe(false);
 
+    fireEvent.click(screen.getByRole("tab", { name: "Tasks" }));
+    expect(screen.getByText("task-1")).toBeTruthy();
+    expect(screen.getByText("2026-05-30 11:00 UTC")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Sort"), {
+      target: { value: "eventCount-desc" }
+    });
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/admin/tasks?"),
+        expect.anything()
+      );
+      expect(fetch).toHaveBeenCalledWith(
+        expect.stringContaining("sortBy=eventCount&sortDir=desc"),
+        expect.anything()
+      );
+    });
+
     fireEvent.click(screen.getByRole("tab", { name: "Devices" }));
     expect(screen.getAllByText("Device A").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("42")).toBeTruthy();
@@ -363,6 +380,32 @@ function handleRequest(input: RequestInfo | URL) {
           cacheWriteTokens: 5,
           costUsd: 0.125,
           totalTokens: 26
+        }
+      ]
+    });
+  }
+  if (path.startsWith("/api/admin/tasks")) {
+    return response({
+      total: 1,
+      rows: [
+        {
+          taskId: "task-1",
+          isFallback: false,
+          startedAt: "2026-05-30T10:00:00.000Z",
+          lastActivityAt: "2026-05-30T11:00:00.000Z",
+          deviceId: "00000000-0000-4000-8000-000000000001",
+          deviceName: "Device A",
+          deviceCount: 1,
+          projectId: "00000000-0000-4000-8000-000000000002",
+          projectName: "Project A",
+          projectCount: 1,
+          eventCount: 3,
+          inputTokens: 10,
+          outputTokens: 2,
+          cacheReadTokens: 3,
+          cacheWriteTokens: 1,
+          totalTokens: 16,
+          costUsd: 0.1
         }
       ]
     });
