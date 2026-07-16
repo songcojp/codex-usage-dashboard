@@ -360,7 +360,7 @@ export function createAdminQueryService(db?: AdminDb): AdminQueryService {
           cacheReadTokens: sum(usageEvents.cacheReadTokens).as("cache_read_tokens"),
           cacheWriteTokens: sum(usageEvents.cacheWriteTokens).as("cache_write_tokens"),
           totalTokens: sum(usageEvents.totalTokens).as("total_tokens"),
-          costUsd: sum(usageEvents.costUsd).as("cost_usd")
+          costUsd: sql<string>`coalesce(sum(${usageEvents.costUsd}), 0)`.as("cost_usd")
         })
         .from(usageEvents)
         .innerJoin(tools, eq(usageEvents.toolId, tools.id))

@@ -378,6 +378,38 @@ describe("admin query service Postgres persistence", () => {
         totalTokens: 2,
         costUsd: "0.01",
         rawMetaJson: {}
+      },
+      {
+        occurredAt: new Date("2026-07-15T08:00:00.000Z"),
+        toolId: tool.id,
+        deviceId: deviceA.id,
+        projectId: projectA.id,
+        sourceEventId: `null-cost-${unique}`,
+        taskId: `task-null-cost-${unique}`,
+        model: "null-cost-model",
+        inputTokens: 1,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        totalTokens: 1,
+        costUsd: null,
+        rawMetaJson: {}
+      },
+      {
+        occurredAt: new Date("2026-07-15T08:01:00.000Z"),
+        toolId: tool.id,
+        deviceId: deviceA.id,
+        projectId: projectA.id,
+        sourceEventId: `priced-${unique}`,
+        taskId: `task-priced-${unique}`,
+        model: "null-cost-model",
+        inputTokens: 1,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        totalTokens: 1,
+        costUsd: "0.01",
+        rawMetaJson: {}
       }
     ]);
 
@@ -486,5 +518,22 @@ describe("admin query service Postgres persistence", () => {
       `task-a-tie-${unique}`,
       `task-b-tie-${unique}`
     ]);
+
+    for (const [sortDir, expected] of [
+      ["asc", [`task-null-cost-${unique}`, `task-priced-${unique}`]],
+      ["desc", [`task-priced-${unique}`, `task-null-cost-${unique}`]]
+    ] as const) {
+      const costSorted = await service.getTasks({
+        from: "2026-07-15",
+        to: "2026-07-15",
+        timeZone: "UTC",
+        tool: tool.slug,
+        model: "null-cost-model",
+        sortBy: "costUsd",
+        sortDir
+      });
+      expect(costSorted.rows.map((row) => row.taskId)).toEqual(expected);
+      expect(costSorted.rows.find((row) => row.taskId === `task-null-cost-${unique}`)?.costUsd).toBe(0);
+    }
   });
 });

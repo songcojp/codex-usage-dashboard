@@ -46,6 +46,9 @@ describe("TasksTable", () => {
 
     expect(screen.getByRole("heading", { name: "Tasks" })).toBeTruthy();
     expect(screen.getByText("Fallback")).toBeTruthy();
+    const fallbackId = screen.getByText("fallback:device-a");
+    expect(fallbackId).toBeTruthy();
+    expect(fallbackId.closest("td")?.getAttribute("title")).toBe("fallback:device-a");
     expect(screen.getByText("Multiple (2)")).toBeTruthy();
     expect(screen.getByText("Project A")).toBeTruthy();
     expect(screen.getByText("16")).toBeTruthy();
