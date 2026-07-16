@@ -3,6 +3,7 @@ import { hashToken } from "@codex-usage-dashboard/shared";
 import { buildApp } from "../app.js";
 import { DeviceAuthError } from "../devices/service.js";
 import type { IngestResult } from "./service.js";
+import type { TaskMetadataIngestResult } from "./task-metadata.js";
 
 const validPayload = {
   device: {
@@ -46,6 +47,40 @@ async function postEvents(
     return await app.inject({
       method: "POST",
       url: "/api/ingest/events",
+      headers: authorization === null ? {} : { authorization },
+      payload
+    });
+  } finally {
+    await app.close();
+  }
+}
+
+const validTaskPayload = {
+  tasks: [
+    {
+      taskId: "task-1",
+      title: "Named task",
+      updatedAt: "2026-07-16T00:00:00.000Z"
+    }
+  ]
+};
+
+async function postTasks(
+  payload: unknown,
+  authorization: string | null = "Bearer device-token",
+  ingestTasks = async (): Promise<TaskMetadataIngestResult> => ({
+    inserted: 1,
+    updated: 0,
+    stale: 0,
+    rejected: []
+  })
+) {
+  const app = await buildApp({ ingestTasks });
+
+  try {
+    return await app.inject({
+      method: "POST",
+      url: "/api/ingest/tasks",
       headers: authorization === null ? {} : { authorization },
       payload
     });
@@ -130,6 +165,53 @@ describe("POST /api/ingest/events", () => {
       attemptedHashes.push(tokenHash);
       if (attemptedHashes.length === 1) throw new DeviceAuthError();
       return { inserted: 1, duplicates: 0, rejected: [] };
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(attemptedHashes).toEqual([
+      hashToken("device-token"),
+      "3e6ac30708331620d70972bdba4e6f0ac619e7848bf21f48257cbc828491ce82"
+    ]);
+  });
+});
+
+describe("POST /api/ingest/tasks", () => {
+  it("returns 401 when bearer token is missing", async () => {
+    const response = await postTasks(validTaskPayload, null);
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({ error: "missing bearer token" });
+  });
+
+  it("rejects envelopes above 1000 records", async () => {
+    const response = await postTasks({ tasks: Array.from({ length: 1001 }, () => ({})) });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: "invalid task metadata batch" });
+  });
+
+  it("returns the task metadata ingest result", async () => {
+    const response = await postTasks(validTaskPayload);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ inserted: 1, updated: 0, stale: 0, rejected: [] });
+  });
+
+  it("returns 401 when the device token is not accepted", async () => {
+    const response = await postTasks(validTaskPayload, "Bearer bad-token", async () => {
+      throw new DeviceAuthError();
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({ error: "invalid device token" });
+  });
+
+  it("falls back to the legacy token hash", async () => {
+    const attemptedHashes: string[] = [];
+    const response = await postTasks(validTaskPayload, "Bearer device-token", async ({ tokenHash }) => {
+      attemptedHashes.push(tokenHash);
+      if (attemptedHashes.length === 1) throw new DeviceAuthError();
+      return { inserted: 1, updated: 0, stale: 0, rejected: [] };
     });
 
     expect(response.statusCode).toBe(200);

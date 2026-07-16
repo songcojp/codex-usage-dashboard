@@ -58,6 +58,20 @@ test("accepts a public CA certificate", async () => {
   }
 });
 
+test("does not mistake task-metadata module names for provider tokens", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "cud-scan-task-name-"));
+  try {
+    await writeFile(path.join(dir, "sample.txt"), [
+      "./task-metadata-sync.js",
+      "./task-metadata-state.js",
+      "task-metadata-upload-http-failed"
+    ].join("\n"));
+    assert.deepEqual(await scanOpenSourceTree(dir), []);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

@@ -11,6 +11,8 @@ import { DurableQueue } from "./queue.js";
 import { RetryBackoff } from "./retry.js";
 import { matchObservation, registerRename, registerReplacement, registerTruncation, tombstoneMissingFiles } from "./source-registry.js";
 import { readAgentState, writeAgentState, type FileCursorState } from "./state.js";
+import { discoverTaskIndexPaths } from "./task-metadata-index.js";
+import { syncTaskMetadata, type TaskMetadataSyncResult } from "./task-metadata-sync.js";
 
 export type WatcherCycleReason = "startup" | "filesystem" | "reconciliation" | "retry";
 
@@ -63,6 +65,10 @@ export type WatcherCycleResult = {
   eventsUploaded: number;
   queueDepth: number;
   nextRetryAt: string | null;
+  taskNamesDiscovered: number;
+  taskNamesSubmitted: number;
+  taskNamesAcknowledged: number;
+  taskNamesRejected: number;
 };
 
 export async function runWatcher(input: {
@@ -73,6 +79,8 @@ export async function runWatcher(input: {
   fetchImpl?: typeof fetch;
   debounceMs?: number;
   reconciliationMs?: number;
+  taskMetadataEnv?: NodeJS.ProcessEnv;
+  taskMetadataHomeDir?: string;
   signal?: AbortSignal;
   onCycle?: (result: WatcherCycleResult) => void;
   onError?: (category: string) => void;
@@ -98,7 +106,10 @@ export async function runWatcher(input: {
     scheduleRetry(retry.nextDelay());
   };
   const refreshWatches = async () => {
-    const roots = await resolveExistingWatchRoots(input.config);
+    const roots = await resolveExistingWatchRoots(input.config, {
+      env: input.taskMetadataEnv,
+      homeDir: input.taskMetadataHomeDir
+    });
     for (const root of roots) {
       if (watchers.has(root)) continue;
       watchers.set(root, fs.watch(root, () => {
@@ -138,7 +149,11 @@ export async function runWatcher(input: {
       eventsQueued: result.eventsQueued,
       eventsUploaded: result.eventsUploaded,
       queueDepth: input.queue.depth,
-      nextRetryAt
+      nextRetryAt,
+      taskNamesDiscovered: result.taskNamesDiscovered,
+      taskNamesSubmitted: result.taskNamesSubmitted,
+      taskNamesAcknowledged: result.taskNamesAcknowledged,
+      taskNamesRejected: result.taskNamesRejected
     });
   });
 
@@ -178,7 +193,20 @@ export async function runWatcherCycle(input: {
   fetchImpl?: typeof fetch;
   now?: () => Date;
   signal?: AbortSignal;
-}): Promise<{ filesAdvanced: number; eventsQueued: number; eventsUploaded: number; uploadStatus: number | null; uploadAttempted: boolean; errorCategory: string | null }> {
+  taskMetadataEnv?: NodeJS.ProcessEnv;
+  taskMetadataHomeDir?: string;
+}): Promise<{
+  filesAdvanced: number;
+  eventsQueued: number;
+  eventsUploaded: number;
+  uploadStatus: number | null;
+  uploadAttempted: boolean;
+  errorCategory: string | null;
+  taskNamesDiscovered: number;
+  taskNamesSubmitted: number;
+  taskNamesAcknowledged: number;
+  taskNamesRejected: number;
+}> {
   throwIfStopped(input.signal);
   let filesAdvanced = 0;
   let eventsQueued = 0;
@@ -186,6 +214,7 @@ export async function runWatcherCycle(input: {
   let uploadStatus: number | null = null;
   let uploadAttempted = false;
   let uploadErrorCategory: string | null = null;
+  let taskSync = emptyTaskMetadataSync();
   const now = input.now ?? (() => new Date());
   const retryDue = !input.nextRetryAt || now().getTime() >= Date.parse(input.nextRetryAt) || input.reason === "retry";
   const before = retryDue ? await attemptQueueDrain(input) : emptyDrain(input.queue.depth);
@@ -285,8 +314,32 @@ export async function runWatcherCycle(input: {
     uploadAttempted ||= after.attempted;
     uploadErrorCategory = after.errorCategory ?? uploadErrorCategory;
   }
+  const eventUploadFailed = uploadErrorCategory !== null ||
+    (uploadStatus !== null && (uploadStatus < 200 || uploadStatus >= 300));
+  if (retryDue && !eventUploadFailed) {
+    taskSync = await syncTaskMetadata({
+      config: input.config,
+      agentStatePath: input.statePath,
+      fetchImpl: input.fetchImpl,
+      signal: input.signal,
+      env: input.taskMetadataEnv,
+      homeDir: input.taskMetadataHomeDir
+    });
+    uploadAttempted ||= taskSync.attempted;
+    uploadStatus = taskSync.status ?? uploadStatus;
+    uploadErrorCategory = taskSync.errorCategory ?? uploadErrorCategory;
+  }
   const finalState = await readAgentState(input.statePath);
   finalState.queueDepth = input.queue.depth;
+  finalState.taskNamesDiscovered = taskSync.discovered;
+  if (!taskSync.errorCategory) {
+    finalState.taskNamesAcknowledged = Math.max(0, taskSync.discovered - taskSync.rejected);
+  }
+  if (taskSync.attempted && taskSync.status !== null &&
+      taskSync.status >= 200 && taskSync.status < 300 &&
+      !taskSync.errorCategory) {
+    finalState.lastTaskMetadataUploadAt = now().toISOString();
+  }
   const responseError = uploadStatus === 401
     ? "authentication-failed"
     : uploadStatus !== null && (uploadStatus < 200 || uploadStatus >= 300)
@@ -294,15 +347,19 @@ export async function runWatcherCycle(input: {
       : null;
   if (uploadErrorCategory || responseError) {
     finalState.lastErrorCategory = uploadErrorCategory ?? responseError;
-    await writeAgentState(finalState, input.statePath);
   }
+  await writeAgentState(finalState, input.statePath);
   return {
     filesAdvanced,
     eventsQueued,
     eventsUploaded,
     uploadStatus,
     uploadAttempted,
-    errorCategory: uploadErrorCategory ?? responseError
+    errorCategory: uploadErrorCategory ?? responseError,
+    taskNamesDiscovered: taskSync.discovered,
+    taskNamesSubmitted: taskSync.submitted,
+    taskNamesAcknowledged: taskSync.acknowledged,
+    taskNamesRejected: taskSync.rejected
   };
 }
 
@@ -384,7 +441,10 @@ function errorCategory(error: unknown): string {
     : "watcher-cycle-failed";
 }
 
-export async function resolveExistingWatchRoots(config: AgentConfig): Promise<string[]> {
+export async function resolveExistingWatchRoots(
+  config: AgentConfig,
+  taskMetadata: { env?: NodeJS.ProcessEnv; homeDir?: string } = {}
+): Promise<string[]> {
   const roots: string[] = [];
   const seen = new Set<string>();
 
@@ -396,8 +456,32 @@ export async function resolveExistingWatchRoots(config: AgentConfig): Promise<st
       }
     }
   }
+  for (const indexPath of await discoverTaskIndexPaths({
+    config,
+    env: taskMetadata.env,
+    homeDir: taskMetadata.homeDir
+  })) {
+    const root = path.dirname(indexPath);
+    if (!seen.has(root)) {
+      seen.add(root);
+      roots.push(root);
+    }
+  }
 
   return roots;
+}
+
+function emptyTaskMetadataSync(): TaskMetadataSyncResult {
+  return {
+    discovered: 0,
+    submitted: 0,
+    acknowledged: 0,
+    rejected: 0,
+    malformed: 0,
+    attempted: false,
+    status: null,
+    errorCategory: null
+  };
 }
 
 async function existingWatchRoots(sourcePath: string): Promise<string[]> {

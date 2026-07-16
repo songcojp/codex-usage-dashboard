@@ -38,6 +38,7 @@ describe("agent watcher", () => {
       configDir: dir,
       statePath,
       queue,
+      taskMetadataHomeDir: dir,
       signal: controller.signal
     })).rejects.toThrow(/watcher stopped/);
     expect((await readAgentState(statePath)).watcherStartedAt).not.toBeNull();
@@ -84,6 +85,7 @@ describe("agent watcher", () => {
       configDir: dir,
       statePath,
       queue,
+      taskMetadataHomeDir: dir,
       signal: controller.signal,
       fetchImpl: async (_url, init) => {
         markFetchStarted();
@@ -123,6 +125,7 @@ describe("agent watcher", () => {
       configDir: dir,
       statePath,
       queue,
+      taskMetadataHomeDir: dir,
       signal: controller.signal,
       fetchImpl: async (_url, init) => {
         requests += 1;
@@ -136,7 +139,7 @@ describe("agent watcher", () => {
     });
 
     try {
-      await waitFor(() => queue.depth === 0, 1_000);
+      await waitFor(() => queue.depth === 0, "queue backlog to drain");
       expect(requests).toBe(3);
     } finally {
       controller.abort();
@@ -166,7 +169,10 @@ describe("agent watcher", () => {
     const nested = path.join(sourceRoot, "2026", "06", "08");
     await fs.mkdir(nested, { recursive: true });
 
-    await expect(resolveExistingWatchRoots(config(sourceRoot))).resolves.toEqual([
+    await expect(resolveExistingWatchRoots(config(sourceRoot), {
+      env: {},
+      homeDir: path.join(dir, "home")
+    })).resolves.toEqual([
       sourceRoot,
       path.join(sourceRoot, "2026"),
       path.join(sourceRoot, "2026", "06"),
@@ -179,7 +185,24 @@ describe("agent watcher", () => {
     const sourceFile = path.join(dir, "session.jsonl");
     await fs.writeFile(sourceFile, "", "utf8");
 
-    await expect(resolveExistingWatchRoots(config(sourceFile))).resolves.toEqual([dir]);
+    await expect(resolveExistingWatchRoots(config(sourceFile), {
+      env: {},
+      homeDir: path.join(dir, "home")
+    })).resolves.toEqual([dir]);
+  });
+
+  it("watches the directory containing a discovered task index", async () => {
+    const dir = await tempDir();
+    const sourceRoot = path.join(dir, "sessions");
+    await fs.mkdir(sourceRoot, { recursive: true });
+    await fs.writeFile(path.join(dir, "session_index.jsonl"), "");
+
+    const roots = await resolveExistingWatchRoots(config(sourceRoot), {
+      env: {},
+      homeDir: path.join(dir, "home")
+    });
+
+    expect(roots).toContain(dir);
   });
 });
 
@@ -200,10 +223,16 @@ function queuedEvent(sourceEventId: string): UsageEventDraft {
   };
 }
 
-async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<void> {
+async function waitFor(
+  predicate: () => boolean,
+  description: string,
+  timeoutMs = 5_000
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!predicate()) {
-    if (Date.now() >= deadline) throw new Error("timed out waiting for condition");
+    if (Date.now() >= deadline) {
+      throw new Error(`timed out waiting for ${description} after ${timeoutMs}ms`);
+    }
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
 }

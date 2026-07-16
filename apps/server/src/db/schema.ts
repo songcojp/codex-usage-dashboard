@@ -83,6 +83,17 @@ export const usageEvents = pgTable(
   ]
 );
 
+export const taskMetadata = pgTable("task_metadata", {
+  taskId: text("task_id").primaryKey(),
+  title: text("title").notNull(),
+  sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }).notNull(),
+  deviceId: uuid("device_id")
+    .references(() => devices.id)
+    .notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull()
+});
+
 export const dailyUsageRollups = pgTable(
   "daily_usage_rollups",
   {
@@ -134,7 +145,8 @@ export const modelPrices = pgTable(
 
 export const deviceRelations = relations(devices, ({ many }) => ({
   events: many(usageEvents),
-  dailyRollups: many(dailyUsageRollups)
+  dailyRollups: many(dailyUsageRollups),
+  taskMetadata: many(taskMetadata)
 }));
 
 export const toolRelations = relations(tools, ({ many }) => ({
@@ -160,6 +172,13 @@ export const usageEventRelations = relations(usageEvents, ({ one }) => ({
   project: one(projects, {
     fields: [usageEvents.projectId],
     references: [projects.id]
+  })
+}));
+
+export const taskMetadataRelations = relations(taskMetadata, ({ one }) => ({
+  device: one(devices, {
+    fields: [taskMetadata.deviceId],
+    references: [devices.id]
   })
 }));
 

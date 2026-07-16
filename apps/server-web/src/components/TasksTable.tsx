@@ -80,10 +80,17 @@ export function TasksTable({
           <tbody>
             {rows.map((row) => (
               <tr key={row.taskId}>
-                <td className="mono" title={row.taskId}>
+                <td title={row.taskId}>
                   {row.isFallback ? <span className="status fallback">{t("Fallback")}</span> : null}
                   {row.isFallback ? " " : null}
-                  <span>{row.taskId}</span>
+                  {row.taskName && !row.isFallback ? (
+                    <span className="task-identity">
+                      <span className="task-name">{row.taskName}</span>
+                      <span className="task-id">{row.taskId}</span>
+                    </span>
+                  ) : (
+                    <span className="mono">{row.taskId}</span>
+                  )}
                 </td>
                 <td>{formatDateTime(row.startedAt)}</td>
                 <td>{formatDateTime(row.lastActivityAt)}</td>

@@ -17,6 +17,7 @@ describe("watcher integration", () => {
       statePath: fixture.statePath,
       queue: fixture.queue,
       reason: "startup",
+      taskMetadataHomeDir: fixture.homeDir,
       signal: controller.signal
     })).rejects.toThrow(/watcher stopped/);
   });
@@ -30,6 +31,7 @@ describe("watcher integration", () => {
       statePath: fixture.statePath,
       queue: fixture.queue,
       reason: "filesystem",
+      taskMetadataHomeDir: fixture.homeDir,
       nextRetryAt: "2026-07-14T00:30:00.000Z",
       now: () => new Date("2026-07-14T00:00:00.000Z"),
       fetchImpl: async () => { requests += 1; return new Response(); }
@@ -59,6 +61,7 @@ describe("watcher integration", () => {
       statePath,
       queue,
       reason: "filesystem",
+      taskMetadataHomeDir: dir,
       nextRetryAt: "2026-07-14T00:30:00.000Z",
       now: () => new Date("2026-07-14T00:00:00.000Z"),
       fetchImpl: async () => { throw new Error("upload must remain gated"); }
@@ -75,6 +78,7 @@ describe("watcher integration", () => {
       statePath: fixture.statePath,
       queue: fixture.queue,
       reason: "startup",
+      taskMetadataHomeDir: fixture.homeDir,
       fetchImpl: async () => { throw new Error("private network detail"); }
     });
     expect(result).toMatchObject({ uploadAttempted: true, errorCategory: "upload-failed" });
@@ -100,13 +104,13 @@ describe("watcher integration", () => {
       return new Response(JSON.stringify({ inserted: body.events.length, duplicates: 0, rejected: [] }), { status: 200 });
     };
 
-    await runWatcherCycle({ config, statePath, queue, reason: "startup", fetchImpl });
+    await runWatcherCycle({ config, statePath, queue, reason: "startup", fetchImpl, taskMetadataHomeDir: dir });
     expect(received).toEqual([]);
     await fs.rename(active, rotated);
     await fs.writeFile(active, "");
-    await runWatcherCycle({ config, statePath, queue, reason: "filesystem", fetchImpl });
+    await runWatcherCycle({ config, statePath, queue, reason: "filesystem", fetchImpl, taskMetadataHomeDir: dir });
     expect(received).toHaveLength(1);
-    await runWatcherCycle({ config, statePath, queue, reason: "filesystem", fetchImpl });
+    await runWatcherCycle({ config, statePath, queue, reason: "filesystem", fetchImpl, taskMetadataHomeDir: dir });
     expect(received).toHaveLength(1);
   });
 
@@ -115,6 +119,11 @@ describe("watcher integration", () => {
     const source = path.join(dir, "sessions", "session.jsonl");
     const statePath = path.join(dir, "state.json");
     await fs.mkdir(path.dirname(source), { recursive: true });
+    await fs.writeFile(path.join(dir, "session_index.jsonl"), `${JSON.stringify({
+      id: "session",
+      thread_name: "Named session",
+      updated_at: "2026-07-14T00:00:00.000Z"
+    })}\n`);
     await fs.writeFile(source, `${JSON.stringify({
       timestamp: "2026-07-14T00:00:00.000Z",
       session_id: "session",
@@ -126,7 +135,19 @@ describe("watcher integration", () => {
       queuePath: path.join(dir, "queue.jsonl"),
       deadLetterPath: path.join(dir, "dead-letter.jsonl")
     });
-    const result = await runWatcherCycle({
+    const fetchImpl = async (url: URL | RequestInfo, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { events?: unknown[]; tasks?: unknown[] };
+      if (new URL(String(url)).pathname === "/api/ingest/tasks") {
+        return new Response(JSON.stringify({
+          inserted: body.tasks?.length ?? 0,
+          updated: 0,
+          stale: 0,
+          rejected: []
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ inserted: body.events?.length ?? 0, duplicates: 0, rejected: [] }), { status: 200 });
+    };
+    const watcherInput = {
       config: {
         serverUrl: "https://example.test",
         deviceToken: "token",
@@ -135,18 +156,35 @@ describe("watcher integration", () => {
       },
       statePath,
       queue,
-      reason: "startup",
-      fetchImpl: async (_url, init) => {
-        const body = JSON.parse(String(init?.body)) as { events: unknown[] };
-        return new Response(JSON.stringify({ inserted: body.events.length, duplicates: 0, rejected: [] }), { status: 200 });
-      }
+      taskMetadataHomeDir: dir,
+      fetchImpl
+    } as const;
+    const result = await runWatcherCycle({
+      ...watcherInput,
+      reason: "startup"
     });
 
-    expect(result).toMatchObject({ filesAdvanced: 1, eventsQueued: 1, eventsUploaded: 1 });
+    expect(result).toMatchObject({
+      filesAdvanced: 1,
+      eventsQueued: 1,
+      eventsUploaded: 1,
+      taskNamesDiscovered: 1,
+      taskNamesSubmitted: 1,
+      taskNamesAcknowledged: 1,
+      taskNamesRejected: 0
+    });
     expect(queue.depth).toBe(0);
-    const state = await readAgentState(statePath);
+    let state = await readAgentState(statePath);
     expect(Object.values(state.files)[0]).toMatchObject({ nextLineNumber: 2 });
     expect(state.lastReconciliationAt).not.toBeNull();
+    expect(state.taskNamesAcknowledged).toBe(1);
+
+    await runWatcherCycle({
+      ...watcherInput,
+      reason: "filesystem"
+    });
+    state = await readAgentState(statePath);
+    expect(state.taskNamesAcknowledged).toBe(1);
   });
 });
 
@@ -156,6 +194,7 @@ async function watcherFixture() {
   await writeAgentState(initialAgentState(), statePath);
   return {
     statePath,
+    homeDir: dir,
     queue: await DurableQueue.open({ queuePath: path.join(dir, "queue.jsonl"), deadLetterPath: path.join(dir, "dead.jsonl") }),
     config: { serverUrl: "https://example.test", deviceToken: "token", deviceName: "device", toolPaths: {} }
   };

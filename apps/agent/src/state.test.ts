@@ -12,6 +12,11 @@ async function tempStatePath(): Promise<string> {
 describe("versioned agent state", () => {
   it("returns a fresh version two state when the file is missing", async () => {
     await expect(readAgentState(await tempStatePath())).resolves.toEqual(initialAgentState());
+    expect(initialAgentState()).toMatchObject({
+      taskNamesDiscovered: 0,
+      taskNamesAcknowledged: 0,
+      lastTaskMetadataUploadAt: null
+    });
   });
 
   it("rejects the previous unversioned fingerprint state", async () => {
@@ -27,8 +32,10 @@ describe("versioned agent state", () => {
     await writeAgentState(initialAgentState(), filePath);
 
     await expect(readAgentState(filePath)).resolves.toEqual(initialAgentState());
-    expect((await fs.stat(filePath)).mode & 0o777).toBe(0o600);
-    expect((await fs.stat(path.dirname(filePath))).mode & 0o777).toBe(0o700);
+    if (process.platform !== "win32") {
+      expect((await fs.stat(filePath)).mode & 0o777).toBe(0o600);
+      expect((await fs.stat(path.dirname(filePath))).mode & 0o777).toBe(0o700);
+    }
     expect((await fs.readdir(path.dirname(filePath))).filter((name) => name.includes(".tmp"))).toEqual([]);
   });
 });

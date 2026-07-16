@@ -9,7 +9,7 @@ const rules = [
   ["PRIVATE_KEY", new RegExp(["-----BEGIN ", "(?:(?:RSA|EC|OPENSSH|ENCRYPTED) )?PRIVATE KEY-----"].join(""), "i")],
   ["PROVIDER_TOKEN", new RegExp([
     "(?:(?:gh", "p_|github_pat_)[A-Za-z0-9_]{20,}|",
-    "s", "k-[A-Za-z0-9_-]{20,}|",
+    "(?<![A-Za-z0-9])s", "k-[A-Za-z0-9_-]{20,}|",
     "xo", "x[baprs]-[A-Za-z0-9-]{20,}|",
     "AK", "IA[0-9A-Z]{16})"
   ].join(""))],

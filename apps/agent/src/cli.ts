@@ -83,6 +83,9 @@ export async function readAgentStatus(statePath: string): Promise<{
   trackedFiles: number;
   queueDepth: number;
   lastErrorCategory: string | null;
+  taskNamesDiscovered: number;
+  taskNamesAcknowledged: number;
+  lastTaskMetadataUploadAt: string | null;
 }> {
   const state = await readAgentState(statePath);
   return {
@@ -93,7 +96,10 @@ export async function readAgentStatus(statePath: string): Promise<{
     lastReconciliationAt: state.lastReconciliationAt,
     trackedFiles: Object.keys(state.files).length,
     queueDepth: state.queueDepth,
-    lastErrorCategory: state.lastErrorCategory
+    lastErrorCategory: state.lastErrorCategory,
+    taskNamesDiscovered: state.taskNamesDiscovered,
+    taskNamesAcknowledged: state.taskNamesAcknowledged,
+    lastTaskMetadataUploadAt: state.lastTaskMetadataUploadAt
   };
 }
 

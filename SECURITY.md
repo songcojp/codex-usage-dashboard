@@ -9,3 +9,9 @@ Include affected versions, impact, reproduction steps, and a minimal proof of co
 ## Deployment notes
 
 Use HTTPS, strong unique administrator credentials, a random JWT secret of at least 32 characters, exact trusted-proxy configuration, and a protected GitHub production Environment. Never commit `.env` files, device tokens, SSH keys, or database backups.
+
+## Data collected by the Agent
+
+The Agent uploads token usage, timestamps, model and source metadata, Codex task IDs, task/session names, and cryptographic device and project identities. Task/session names may contain user-authored content, so deployments must protect dashboard and database access accordingly.
+
+The Agent does not upload full prompts, responses, or local filesystem paths.

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { calculateMigrationChecksum, verifyAppliedMigrationChecksum } from "./migrate.js";
-import { dailyUsageRollups, modelPrices, projects, usageEvents } from "./schema.js";
+import { dailyUsageRollups, modelPrices, projects, taskMetadata, usageEvents } from "./schema.js";
 
 const migrationsUrl = new URL("./migrations/", import.meta.url);
 const migrationFiles = readdirSync(migrationsUrl).filter((file) => file.endsWith(".sql")).sort();
@@ -9,6 +9,10 @@ const migrationSql = readFileSync(new URL("./migrations/0001_initial.sql", impor
 const bigintMigrationUrl = new URL("./migrations/0002_bigint_usage_counters.sql", import.meta.url);
 const bigintMigrationSql = existsSync(bigintMigrationUrl)
   ? readFileSync(bigintMigrationUrl, "utf8")
+  : "";
+const taskMetadataMigrationUrl = new URL("./migrations/0004_task_metadata.sql", import.meta.url);
+const taskMetadataMigrationSql = existsSync(taskMetadataMigrationUrl)
+  ? readFileSync(taskMetadataMigrationUrl, "utf8")
   : "";
 
 describe("database schema", () => {
@@ -18,6 +22,10 @@ describe("database schema", () => {
     expect(usageEvents.sourceEventId.name).toBe("source_event_id");
     expect(usageEvents.taskId.name).toBe("task_id");
     expect(usageEvents.taskId.notNull).toBe(true);
+    expect(taskMetadata.taskId.name).toBe("task_id");
+    expect(taskMetadata.title.notNull).toBe(true);
+    expect(taskMetadata.sourceUpdatedAt.name).toBe("source_updated_at");
+    expect(taskMetadata.deviceId.name).toBe("device_id");
     expect(projects.repoHash.notNull).toBe(true);
     expect(projects.repoHash.default).toBe("");
     expect(projects.remoteHash.notNull).toBe(true);
@@ -49,7 +57,8 @@ describe("public database baseline", () => {
     expect(migrationFiles).toEqual([
       "0001_initial.sql",
       "0002_bigint_usage_counters.sql",
-      "0003_usage_event_task_ids.sql"
+      "0003_usage_event_task_ids.sql",
+      "0004_task_metadata.sql"
     ]);
     for (const table of ["usage_events", "daily_usage_rollups"]) {
       expect(bigintMigrationSql).toContain(`ALTER TABLE "${table}"`);
@@ -65,6 +74,9 @@ describe("public database baseline", () => {
         );
       }
     }
+    expect(taskMetadataMigrationSql).toContain('CREATE TABLE "task_metadata"');
+    expect(taskMetadataMigrationSql).toContain('PRIMARY KEY');
+    expect(taskMetadataMigrationSql).toContain('REFERENCES "devices" ("id")');
   });
 
   it("creates every business table and required index", () => {

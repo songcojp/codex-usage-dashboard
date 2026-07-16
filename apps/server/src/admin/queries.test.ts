@@ -175,6 +175,7 @@ describe("admin task query helpers", () => {
     expect(
       normalizeTaskRow({
         taskId: "fallback:device-a",
+        taskName: null,
         startedAt: new Date("2026-07-15T10:00:00.000Z"),
         lastActivityAt: new Date("2026-07-15T11:00:00.000Z"),
         deviceId: "device-a",
@@ -193,6 +194,7 @@ describe("admin task query helpers", () => {
       })
     ).toEqual({
       taskId: "fallback:device-a",
+      taskName: null,
       isFallback: true,
       startedAt: new Date("2026-07-15T10:00:00.000Z"),
       lastActivityAt: new Date("2026-07-15T11:00:00.000Z"),

@@ -731,6 +731,30 @@ td {
   color: var(--text-muted);
 }
 
+.task-identity {
+  display: inline-flex;
+  min-width: 180px;
+  max-width: 320px;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.task-name {
+  color: var(--text-primary);
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.task-id {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .empty-cell {
   padding: 36px 12px;
   color: var(--text-muted);
