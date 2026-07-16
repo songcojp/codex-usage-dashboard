@@ -111,7 +111,7 @@ For an independent deployment that imports selected history from an existing ins
 
 ## Privacy and security
 
-The agent uploads token counts, timestamps, model names, source types, Codex task IDs, and cryptographic hashes. It does not upload prompt text, response text, session titles, or full local paths. Review [SECURITY.md](SECURITY.md) before exposing the service publicly.
+The agent uploads token counts, timestamps, model names, source types, Codex task IDs, task/session names, and cryptographic hashes. Task/session names may contain user-authored task content. It does not upload prompt text, response text, or full local paths. Review [SECURITY.md](SECURITY.md) before exposing the service publicly.
 
 ## Contributing
 
