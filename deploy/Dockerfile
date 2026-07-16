@@ -8,7 +8,7 @@ COPY apps/server-web/package.json apps/server-web/package.json
 COPY apps/agent/package.json apps/agent/package.json
 COPY packages/shared/package.json packages/shared/package.json
 
-RUN npm ci
+RUN npm ci --ignore-scripts
 
 FROM deps AS build
 
