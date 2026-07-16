@@ -24,13 +24,14 @@ type CodexSessionRecord = {
 
 export type CodexParserContext = {
   sessionId: string | null;
+  taskId: string | null;
   cwd: string | null;
   model: string | null;
   toolSlug: Extract<ToolSlug, "codex-vscode-plugin" | "codex-desktop" | "codex-cli" | "other">;
 };
 
 export function initialCodexContext(): CodexParserContext {
-  return { sessionId: null, cwd: null, model: null, toolSlug: "other" };
+  return { sessionId: null, taskId: null, cwd: null, model: null, toolSlug: "other" };
 }
 
 export async function parseCodexFile(filePath: string): Promise<UsageEventDraft[]> {
@@ -71,10 +72,12 @@ export async function parseCodexLine(
     const sessionRecord = record as CodexSessionRecord;
     const payload = objectValue(sessionRecord.payload);
     if (sessionRecord.type === "session_meta") {
+      const sessionId = optionalString(payload?.id) ?? input.context.sessionId;
       return {
         context: {
           ...input.context,
-          sessionId: optionalString(payload?.id) ?? input.context.sessionId,
+          sessionId,
+          taskId: subagentParentThreadId(payload) ?? sessionId,
           cwd: optionalString(payload?.cwd) ?? input.context.cwd,
           toolSlug: classifyCodexSessionTool(payload)
         }
@@ -102,11 +105,16 @@ export async function parseCodexLine(
     const inputTokens = Math.max(0, rawInputTokens - cacheReadTokens);
     const outputTokens = tokenCount(usage.output_tokens, `Codex record ${input.lineNumber} output_tokens`);
     const sourceIdBasis = `${input.context.toolSlug}:${occurredAt}:${input.context.sessionId ?? ""}:${input.lineNumber}`;
+    const taskId = input.context.taskId ?? input.context.sessionId;
     return {
       context: input.context,
       event: usageEventDraftSchema.parse({
         sourceEventId: sha256Hex(sourceIdBasis),
-        taskId: input.context.sessionId,
+        taskId,
+        sourceSessionId:
+          input.context.sessionId && taskId && input.context.sessionId !== taskId
+            ? input.context.sessionId
+            : undefined,
         toolSlug: input.context.toolSlug,
         occurredAt,
         project: await identityFromCwd({ cwd: activeCwd }),
@@ -147,6 +155,13 @@ function classifyCodexSessionTool(
   }
 
   return "other";
+}
+
+function subagentParentThreadId(payload: Record<string, unknown> | null): string | null {
+  const source = objectValue(payload?.source);
+  const subagent = objectValue(source?.subagent);
+  const threadSpawn = objectValue(subagent?.thread_spawn);
+  return optionalString(threadSpawn?.parent_thread_id);
 }
 
 function isLegacyUsageRecord(record: CodexUsageRecord): boolean {

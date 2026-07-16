@@ -29,6 +29,13 @@ describe("DataExplorer", () => {
   test("keeps one data tablist and exposes the selected table workflow", () => {
     render(<Fixture />);
     expect(screen.getAllByRole("tablist")).toHaveLength(1);
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "Tasks",
+      "Events",
+      "Devices",
+      "Projects",
+      "Prices"
+    ]);
     expect(screen.getByRole("tab", { name: "Events" }).getAttribute("aria-selected")).toBe("true");
     fireEvent.click(screen.getByRole("tab", { name: "Tasks" }));
     expect(screen.getByText("Task A")).toBeTruthy();

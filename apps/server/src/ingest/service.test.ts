@@ -4,6 +4,7 @@ import {
   ingestValidatedBatch,
   normalizeProjectIdentity,
   summarizeIngestResult,
+  taskReassignmentCandidates,
   validateBatch,
   type IngestStore
 } from "./service.js";
@@ -211,7 +212,7 @@ describe("normalizeProjectIdentity", () => {
 
 describe("ingestValidatedBatch", () => {
   it("enriches a duplicate fallback event with a recovered real task ID", async () => {
-    const enriched: Array<{ sourceEventId: string; taskId: string }> = [];
+    const enriched: Array<{ sourceEventId: string; taskId: string; sourceSessionId?: string }> = [];
     const store: IngestStore = {
       requireDevice: async () => ({ id: "device-1" }),
       updateDevice: async () => undefined,
@@ -220,7 +221,11 @@ describe("ingestValidatedBatch", () => {
       upsertProject: async () => ({ id: "project-1" }),
       insertUsageEvent: async () => false,
       enrichUsageEventTask: async (event) => {
-        enriched.push({ sourceEventId: event.sourceEventId, taskId: event.taskId });
+        enriched.push({
+          sourceEventId: event.sourceEventId,
+          taskId: event.taskId,
+          sourceSessionId: event.sourceSessionId
+        });
       },
       incrementDailyRollup: async () => undefined
     };
@@ -229,13 +234,38 @@ describe("ingestValidatedBatch", () => {
       tokenHash: "token-hash",
       batch: {
         ...validBatch,
-        events: [{ ...validBatch.events[0], taskId: "task-real" }]
+        events: [{
+          ...validBatch.events[0],
+          taskId: "parent-task",
+          sourceSessionId: "child-session"
+        }]
       },
       store
     });
 
     expect(result).toEqual({ inserted: 0, duplicates: 1, rejected: [] });
-    expect(enriched).toEqual([{ sourceEventId: "event-id-123456", taskId: "task-real" }]);
+    expect(enriched).toEqual([{
+      sourceEventId: "event-id-123456",
+      taskId: "parent-task",
+      sourceSessionId: "child-session"
+    }]);
+  });
+
+  it("allows duplicate task repair only from fallback or the source session", () => {
+    expect(taskReassignmentCandidates({
+      deviceId: "device-1",
+      taskId: "parent-task",
+      sourceSessionId: "child-session"
+    })).toEqual(["fallback:device-1", "child-session"]);
+    expect(taskReassignmentCandidates({
+      deviceId: "device-1",
+      taskId: "task-real"
+    })).toEqual(["fallback:device-1"]);
+    expect(taskReassignmentCandidates({
+      deviceId: "device-1",
+      taskId: "fallback:device-1",
+      sourceSessionId: "child-session"
+    })).toEqual([]);
   });
 
   it("counts inserted and duplicate events while only rolling up newly inserted events", async () => {

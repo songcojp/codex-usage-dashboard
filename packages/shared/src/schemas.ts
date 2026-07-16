@@ -29,6 +29,7 @@ export const sanitizedMetadataSchema = z.record(z.string(), z.unknown()).superRe
 export const usageEventDraftSchema = z.object({
   sourceEventId: z.string().min(12),
   taskId: z.string().min(1).nullable().optional(),
+  sourceSessionId: z.string().min(1).optional(),
   toolSlug: toolSlugSchema,
   occurredAt: z.string().datetime(),
   project: projectIdentitySchema,

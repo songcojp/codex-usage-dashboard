@@ -106,7 +106,23 @@ describe("ingestBatch Postgres persistence", () => {
         tokenHash,
         batch: {
           ...testBatch,
-          events: [{ ...testBatch.events[0], taskId: "different-real-task" }]
+          events: [{
+            ...testBatch.events[0],
+            taskId: "parent-task",
+            sourceSessionId: "recovered-task"
+          }]
+        },
+        db
+      });
+      await ingestBatch({
+        tokenHash,
+        batch: {
+          ...testBatch,
+          events: [{
+            ...testBatch.events[0],
+            taskId: "different-real-task",
+            sourceSessionId: "different-child-session"
+          }]
         },
         db
       });
@@ -145,7 +161,7 @@ describe("ingestBatch Postgres persistence", () => {
 
       expect(firstResult).toEqual({ inserted: 1, duplicates: 0, rejected: [] });
       expect(secondResult).toEqual({ inserted: 0, duplicates: 1, rejected: [] });
-      expect(eventRows).toMatchObject([{ taskId: "recovered-task" }]);
+      expect(eventRows).toMatchObject([{ taskId: "parent-task" }]);
       expect(rollupRows).toEqual([{ eventCount: 1, totalTokens: 20 }]);
     }
   );

@@ -59,7 +59,7 @@ NODE_EXTRA_CA_CERTS="$HOME/.config/codex-usage-dashboard-agent/server-ca.crt" \
   npm run agent -- backfill-task-ids --confirm
 ```
 
-The `NODE_EXTRA_CA_CERTS` prefix is required for private-HTTPS installations and can be omitted when the server certificate already chains to a public CA. The command reads configured Codex session JSONL files from the beginning in batches of at most 500 events. It does not reset watcher cursors or modify the durable queue, and it is safe to run again. Duplicate events only replace a device-specific fallback task with a recovered real task ID; they do not change token or cost values. Events whose original task cannot be recovered remain grouped in one fallback task for that device.
+The `NODE_EXTRA_CA_CERTS` prefix is required for private-HTTPS installations and can be omitted when the server certificate already chains to a public CA. The command reads configured Codex session JSONL files from the beginning in batches of at most 500 events. It does not reset watcher cursors or modify the durable queue, and it is safe to run again. Duplicate events may replace a device-specific fallback task with a recovered real task ID, or replace a matching subagent child-session ID with its parent task ID; they do not change token or cost values. Deploy both the compatible server and Agent before rerunning the command for subagent repair. Events whose original task cannot be recovered remain grouped in one fallback task for that device.
 
 ## OS and browser certificate trust
 

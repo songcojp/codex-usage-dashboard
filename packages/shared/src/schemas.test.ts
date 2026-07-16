@@ -47,6 +47,20 @@ describe("usage event schema", () => {
     expect(usageEventDraftSchema.parse({ ...event, taskId: "task-1" }).taskId).toBe("task-1");
     expect(usageEventDraftSchema.parse(event).taskId).toBeUndefined();
   });
+
+  it("accepts optional source session evidence for task reassignment", () => {
+    expect(usageEventDraftSchema.parse({
+      ...event,
+      taskId: "parent-task",
+      sourceSessionId: "child-session"
+    }).sourceSessionId).toBe("child-session");
+    expect(usageEventDraftSchema.parse(event).sourceSessionId).toBeUndefined();
+    expect(usageEventDraftSchema.safeParse({
+      ...event,
+      taskId: "parent-task",
+      sourceSessionId: ""
+    }).success).toBe(false);
+  });
 });
 
 describe("task metadata schemas", () => {
