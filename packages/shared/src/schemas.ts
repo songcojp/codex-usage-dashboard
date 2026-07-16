@@ -42,6 +42,26 @@ export const usageEventDraftSchema = z.object({
   metadata: sanitizedMetadataSchema.default({})
 });
 
+export const taskMetadataDraftSchema = z.object({
+  taskId: z.string().min(1),
+  title: z.string().trim().min(1).max(500),
+  updatedAt: z.string().datetime()
+});
+
+export const taskMetadataBatchEnvelopeSchema = z.object({
+  tasks: z.array(z.unknown()).max(1000)
+});
+
+export const taskMetadataAcknowledgementSchema = z.object({
+  inserted: z.number().int().nonnegative(),
+  updated: z.number().int().nonnegative(),
+  stale: z.number().int().nonnegative(),
+  rejected: z.array(z.object({
+    taskId: z.string(),
+    reason: z.string().min(1)
+  }))
+});
+
 export const ingestBatchSchema = z.object({
   device: z.object({
     name: z.string().min(1),
@@ -54,3 +74,6 @@ export const ingestBatchSchema = z.object({
 export type ToolSlug = z.infer<typeof toolSlugSchema>;
 export type UsageEventDraft = z.infer<typeof usageEventDraftSchema>;
 export type IngestBatch = z.infer<typeof ingestBatchSchema>;
+export type TaskMetadataDraft = z.infer<typeof taskMetadataDraftSchema>;
+export type TaskMetadataBatchEnvelope = z.infer<typeof taskMetadataBatchEnvelopeSchema>;
+export type TaskMetadataAcknowledgement = z.infer<typeof taskMetadataAcknowledgementSchema>;
