@@ -67,3 +67,16 @@ test("deployment removes stale tracked files without deleting protected environm
   assert.match(source, /--exclude "\.env"/);
   assert.doesNotMatch(source, /--delete-excluded/);
 });
+
+test("remote compose commands cannot consume the streamed deployment script", async () => {
+  const source = await readFile(deployScript, "utf8");
+  const remoteScript = source.split("<<'REMOTE_SCRIPT'")[1];
+  assert.ok(remoteScript);
+  const composeCommands = remoteScript
+    .split(/\r?\n/)
+    .filter((line) => line.includes("docker compose"));
+  assert.ok(composeCommands.length > 0);
+  for (const command of composeCommands) {
+    assert.match(command, /< \/dev\/null/, command);
+  }
+});

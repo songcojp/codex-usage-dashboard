@@ -66,8 +66,10 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
-docker compose --env-file .env -f "$compose_file" up -d --build
-docker compose --env-file .env -f "$compose_file" exec -T server node apps/server/dist/db/migrate.js
+# This script is streamed through `ssh ... bash -s`; Compose must not consume
+# the remaining deployment commands from the shared standard input.
+docker compose --env-file .env -f "$compose_file" up -d --build < /dev/null
+docker compose --env-file .env -f "$compose_file" exec -T server node apps/server/dist/db/migrate.js < /dev/null
 
 public_port="${PUBLIC_PORT:-}"
 if [[ -z "$public_port" && -f .env ]]; then
@@ -85,7 +87,7 @@ for attempt in $(seq 1 30); do
       exit 0
     fi
   else
-    if docker compose --env-file .env -f "$compose_file" exec -T server node -e "const res = await fetch('http://localhost:3000/api/health'); if (!res.ok) process.exit(1);" >/dev/null 2>&1; then
+    if docker compose --env-file .env -f "$compose_file" exec -T server node -e "const res = await fetch('http://localhost:3000/api/health'); if (!res.ok) process.exit(1);" < /dev/null >/dev/null 2>&1; then
       echo "Health check passed: /api/health"
       exit 0
     fi
@@ -96,6 +98,6 @@ for attempt in $(seq 1 30); do
 done
 
 echo "Health check failed: $health_url" >&2
-docker compose --env-file .env -f "$compose_file" logs --tail=100 server >&2
+docker compose --env-file .env -f "$compose_file" logs --tail=100 server < /dev/null >&2
 exit 1
 REMOTE_SCRIPT
