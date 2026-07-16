@@ -44,6 +44,7 @@ describe("admin API client", () => {
       if (path.startsWith("/api/admin/trends")) return jsonResponse({ points: [] });
       if (path.startsWith("/api/admin/project-ratios")) return jsonResponse({ daily: [], total: [] });
       if (path.startsWith("/api/admin/events")) return jsonResponse({ rows: [], total: 0 });
+      if (path.startsWith("/api/admin/tasks")) return jsonResponse({ rows: [{ taskId: "task-1" }], total: 1 });
       if (path.startsWith("/api/admin/devices")) return jsonResponse({ rows: [] });
       if (path.startsWith("/api/admin/projects")) return jsonResponse({ rows: [] });
       if (path.startsWith("/api/admin/models")) return jsonResponse({ rows: [] });
@@ -64,7 +65,8 @@ describe("admin API client", () => {
         timeZone: "UTC"
       },
       { limit: 25, offset: 0, sortBy: "cacheTokens", sortDir: "desc" },
-      { sortBy: "totalTokens", sortDir: "asc" }
+      { sortBy: "totalTokens", sortDir: "asc" },
+      { limit: 25, offset: 25, sortBy: "lastActivityAt", sortDir: "desc" }
     );
 
     const paths = fetchMock.mock.calls.map(([path]) => path.toString());
@@ -82,6 +84,9 @@ describe("admin API client", () => {
     );
     expect(paths).toContain(
       "/api/admin/events?from=2026-05-01&to=2026-05-30&tool=codex-cli&deviceId=00000000-0000-4000-8000-000000000001&projectId=00000000-0000-4000-8000-000000000002&model=gpt-5&timeZone=UTC&limit=25&offset=0&sortBy=cacheTokens&sortDir=desc"
+    );
+    expect(paths).toContain(
+      "/api/admin/tasks?from=2026-05-01&to=2026-05-30&tool=codex-cli&deviceId=00000000-0000-4000-8000-000000000001&projectId=00000000-0000-4000-8000-000000000002&model=gpt-5&timeZone=UTC&limit=25&offset=25&sortBy=lastActivityAt&sortDir=desc"
     );
     expect(paths).toContain(
       "/api/admin/project-ratios?from=2026-05-01&to=2026-05-30&tool=codex-cli&deviceId=00000000-0000-4000-8000-000000000001&model=gpt-5&timeZone=UTC"

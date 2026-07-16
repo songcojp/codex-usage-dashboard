@@ -48,6 +48,20 @@ export type UsageEvent = UsageSummary & {
   model: string;
 };
 
+export type TaskUsage = Omit<UsageSummary, "eventCount"> & {
+  taskId: string;
+  isFallback: boolean;
+  startedAt: string;
+  lastActivityAt: string;
+  deviceId: string | null;
+  deviceName: string | null;
+  deviceCount: number;
+  projectId: string | null;
+  projectName: string | null;
+  projectCount: number;
+  eventCount: number;
+};
+
 export type Device = {
   id: string;
   name: string;
@@ -122,6 +136,7 @@ export type EventSortBy =
   | "cacheTokens"
   | "costUsd";
 export type ProjectSortBy = "eventCount" | "totalTokens" | "costUsd" | "updatedAt";
+export type TaskSortBy = "lastActivityAt" | "eventCount" | "totalTokens" | "costUsd";
 export type SortDir = "asc" | "desc";
 
 export type DashboardData = {
@@ -129,6 +144,7 @@ export type DashboardData = {
   trends: { points: TrendPoint[] };
   projectRatios: ProjectRatioResponse;
   events: { rows: UsageEvent[]; total: number };
+  tasks: { rows: TaskUsage[]; total: number };
   devices: { rows: Device[] };
   projects: { rows: Project[] };
   deviceOptions: { rows: Device[] };
@@ -147,6 +163,13 @@ export type EventPage = {
 
 export type ProjectSortRequest = {
   sortBy: ProjectSortBy;
+  sortDir: SortDir;
+};
+
+export type TaskPage = {
+  limit: number;
+  offset: number;
+  sortBy: TaskSortBy;
   sortDir: SortDir;
 };
 
@@ -215,7 +238,13 @@ export async function getUsageSummary(filters: UsageFilters): Promise<UsageSumma
 export async function getDashboardData(
   filters: UsageFilters,
   page: EventPage,
-  projectSort: ProjectSortRequest
+  projectSort: ProjectSortRequest,
+  taskPage: TaskPage = {
+    limit: 25,
+    offset: 0,
+    sortBy: "lastActivityAt",
+    sortDir: "desc"
+  }
 ): Promise<DashboardData> {
   const query = toQueryString(filters);
   const eventQuery = appendQuery(
@@ -223,6 +252,10 @@ export async function getDashboardData(
     `limit=${page.limit}&offset=${page.offset}&sortBy=${page.sortBy}&sortDir=${page.sortDir}`
   );
   const projectQuery = appendQuery(query, `sortBy=${projectSort.sortBy}&sortDir=${projectSort.sortDir}`);
+  const taskQuery = appendQuery(
+    query,
+    `limit=${taskPage.limit}&offset=${taskPage.offset}&sortBy=${taskPage.sortBy}&sortDir=${taskPage.sortDir}`
+  );
   const deviceOptionsQuery = toQueryString(withoutKeys(filters, ["deviceId"]));
   const projectOptionsQuery = toQueryString(withoutKeys(filters, ["projectId"]));
   const projectRatioQuery = toQueryString(withoutKeys(filters, ["projectId"]));
@@ -232,6 +265,7 @@ export async function getDashboardData(
     trends,
     projectRatios,
     events,
+    tasks,
     devices,
     projects,
     deviceOptions,
@@ -244,6 +278,7 @@ export async function getDashboardData(
       apiGet<{ points: TrendPoint[] }>(`/api/admin/trends${query}`),
       apiGet<ProjectRatioResponse>(`/api/admin/project-ratios${projectRatioQuery}`),
       apiGet<{ rows: UsageEvent[]; total: number }>(`/api/admin/events${eventQuery}`),
+      apiGet<{ rows: TaskUsage[]; total: number }>(`/api/admin/tasks${taskQuery}`),
       apiGet<{ rows: Device[] }>(`/api/admin/devices${query}`),
       apiGet<{ rows: Project[] }>(`/api/admin/projects${projectQuery}`),
       apiGet<{ rows: Device[] }>(`/api/admin/devices${deviceOptionsQuery}`),
@@ -258,6 +293,7 @@ export async function getDashboardData(
     trends,
     projectRatios,
     events,
+    tasks,
     devices,
     projects,
     deviceOptions,
