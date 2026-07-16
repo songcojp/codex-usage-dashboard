@@ -179,9 +179,12 @@ function restoreParserContext(
   return {
     ...initial,
     sessionId: parser.sessionId ?? null,
+    taskId: parser.taskId ?? null,
     cwd: parser.cwd ?? null,
     model: parser.model ?? null,
-    toolSlug: parser.toolSlug ?? "other"
+    toolSlug: parser.toolSlug ?? "other",
+    subagentStartedAtMs: parser.subagentStartedAtMs ?? null,
+    subagentOwnTurnStarted: parser.subagentOwnTurnStarted ?? false
   };
 }
 

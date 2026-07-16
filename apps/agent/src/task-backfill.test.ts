@@ -124,6 +124,14 @@ function sessionLog(taskId: string, eventCount: number): string {
     },
     {
       timestamp: "2026-05-30T00:00:00.000Z",
+      type: "event_msg",
+      payload: {
+        type: "task_started",
+        started_at: Date.parse("2026-05-30T00:00:00.000Z") / 1000
+      }
+    },
+    {
+      timestamp: "2026-05-30T00:00:00.000Z",
       type: "turn_context",
       payload: { cwd: "/workspace/example", model: "gpt-5" }
     }
@@ -161,6 +169,14 @@ function subagentSessionLog(): string {
           }
         },
         originator: "Codex Desktop"
+      }
+    },
+    {
+      timestamp: "2026-05-30T00:00:00.000Z",
+      type: "event_msg",
+      payload: {
+        type: "task_started",
+        started_at: Date.parse("2026-05-30T00:00:00.000Z") / 1000
       }
     },
     {

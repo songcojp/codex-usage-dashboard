@@ -9,6 +9,7 @@ import { DurableQueue } from "./queue.js";
 import { initialAgentState, readAgentState, writeAgentState } from "./state.js";
 import { runWatcher } from "./watcher.js";
 import { backfillTaskIds } from "./task-backfill.js";
+import { rebuildTask } from "./task-rebuild.js";
 
 export function createProgram(): Command {
   const program = new Command().name("codex-usage-dashboard-agent");
@@ -51,6 +52,21 @@ export function createProgram(): Command {
       const config = await readAgentConfig(configPath());
       console.log(JSON.stringify(await backfillTaskIds({
         config,
+        confirm: Boolean(options.confirm),
+        dryRun: Boolean(options.dryRun)
+      })));
+    });
+
+  program
+    .command("rebuild-task")
+    .requiredOption("--task-id <taskId>", "target parent task ID")
+    .option("--confirm", "upload canonical events and prune stale task events")
+    .option("--dry-run", "scan and report canonical events without server changes")
+    .action(async (options: { taskId: string; confirm?: boolean; dryRun?: boolean }) => {
+      const config = await readAgentConfig(configPath());
+      console.log(JSON.stringify(await rebuildTask({
+        config,
+        taskId: options.taskId,
         confirm: Boolean(options.confirm),
         dryRun: Boolean(options.dryRun)
       })));

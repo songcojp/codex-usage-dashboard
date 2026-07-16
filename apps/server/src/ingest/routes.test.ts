@@ -4,6 +4,7 @@ import { buildApp } from "../app.js";
 import { DeviceAuthError } from "../devices/service.js";
 import type { IngestResult } from "./service.js";
 import type { TaskMetadataIngestResult } from "./task-metadata.js";
+import type { TaskRebuildResult } from "./task-rebuild.js";
 
 const validPayload = {
   device: {
@@ -81,6 +82,29 @@ async function postTasks(
     return await app.inject({
       method: "POST",
       url: "/api/ingest/tasks",
+      headers: authorization === null ? {} : { authorization },
+      payload
+    });
+  } finally {
+    await app.close();
+  }
+}
+
+async function postTaskRebuild(
+  payload: unknown,
+  authorization: string | null = "Bearer device-token",
+  rebuildTask = async (): Promise<TaskRebuildResult> => ({
+    deleted: 10,
+    canonicalEvents: 2,
+    rollupsRebuilt: 7
+  })
+) {
+  const app = await buildApp({ rebuildTask });
+
+  try {
+    return await app.inject({
+      method: "POST",
+      url: "/api/ingest/rebuild-task",
       headers: authorization === null ? {} : { authorization },
       payload
     });
@@ -219,5 +243,49 @@ describe("POST /api/ingest/tasks", () => {
       hashToken("device-token"),
       "3e6ac30708331620d70972bdba4e6f0ac619e7848bf21f48257cbc828491ce82"
     ]);
+  });
+});
+
+describe("POST /api/ingest/rebuild-task", () => {
+  const payload = {
+    taskId: "task-1",
+    sourceEventIds: ["event-123456789", "event-987654321"]
+  };
+
+  it("requires a device bearer token", async () => {
+    const response = await postTaskRebuild(payload, null);
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({ error: "missing bearer token" });
+  });
+
+  it("rejects malformed canonical event sets", async () => {
+    const response = await postTaskRebuild({
+      taskId: "task-1",
+      sourceEventIds: ["duplicate-event", "duplicate-event"]
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: "invalid task rebuild request" });
+  });
+
+  it("returns the targeted rebuild result", async () => {
+    const response = await postTaskRebuild(payload);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      deleted: 10,
+      canonicalEvents: 2,
+      rollupsRebuilt: 7
+    });
+  });
+
+  it("returns 401 when the device token is rejected", async () => {
+    const response = await postTaskRebuild(payload, "Bearer bad-token", async () => {
+      throw new DeviceAuthError();
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({ error: "invalid device token" });
   });
 });

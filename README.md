@@ -61,6 +61,28 @@ NODE_EXTRA_CA_CERTS="$HOME/.config/codex-usage-dashboard-agent/server-ca.crt" \
 
 The `NODE_EXTRA_CA_CERTS` prefix is required for private-HTTPS installations and can be omitted when the server certificate already chains to a public CA. The command reads configured Codex session JSONL files from the beginning in batches of at most 500 events. It does not reset watcher cursors or modify the durable queue, and it is safe to run again. Duplicate events may replace a device-specific fallback task with a recovered real task ID, or replace a matching subagent child-session ID with its parent task ID; they do not change token or cost values. Deploy both the compatible server and Agent before rerunning the command for subagent repair. Events whose original task cannot be recovered remain grouped in one fallback task for that device.
 
+### Targeted task rebuild
+
+Use this command when a parser correction requires one task's stored usage
+events to be replaced with the canonical events from the local Codex session
+logs:
+
+```powershell
+npm run agent -- rebuild-task --task-id <task-id> --dry-run
+npm run agent -- rebuild-task --task-id <task-id> --confirm
+```
+
+Before running `--confirm`, stop the installed watcher and back up the Agent
+configuration, parser state, and pending queue. The command uploads canonical
+events first, then asks the server to remove only non-canonical events for the
+same authenticated device and task. The server rebuilds daily rollups in the
+same transaction.
+
+Restart the watcher only after the rebuild succeeds. If the parser context
+changed, reset local Agent state so active logs are replayed with the corrected
+parser. The device token authorizes this maintenance operation; treat it as a
+secret and do not expose it in command output, logs, or screenshots.
+
 ## OS and browser certificate trust
 
 Private-HTTPS users can install the committed Caddy root certificate into their operating-system trust store with standalone scripts. These scripts do not modify the Agent, its configuration, systemd services, or Windows scheduled tasks.

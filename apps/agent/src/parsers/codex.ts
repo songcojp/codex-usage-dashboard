@@ -28,10 +28,20 @@ export type CodexParserContext = {
   cwd: string | null;
   model: string | null;
   toolSlug: Extract<ToolSlug, "codex-vscode-plugin" | "codex-desktop" | "codex-cli" | "other">;
+  subagentStartedAtMs: number | null;
+  subagentOwnTurnStarted: boolean;
 };
 
 export function initialCodexContext(): CodexParserContext {
-  return { sessionId: null, taskId: null, cwd: null, model: null, toolSlug: "other" };
+  return {
+    sessionId: null,
+    taskId: null,
+    cwd: null,
+    model: null,
+    toolSlug: "other",
+    subagentStartedAtMs: null,
+    subagentOwnTurnStarted: false
+  };
 }
 
 export async function parseCodexFile(filePath: string): Promise<UsageEventDraft[]> {
@@ -72,14 +82,35 @@ export async function parseCodexLine(
     const sessionRecord = record as CodexSessionRecord;
     const payload = objectValue(sessionRecord.payload);
     if (sessionRecord.type === "session_meta") {
+      if (input.context.subagentStartedAtMs !== null) {
+        return { context: input.context };
+      }
       const sessionId = optionalString(payload?.id) ?? input.context.sessionId;
+      const parentTaskId = subagentParentThreadId(payload);
       return {
         context: {
           ...input.context,
           sessionId,
-          taskId: subagentParentThreadId(payload) ?? sessionId,
+          taskId: parentTaskId ?? sessionId,
           cwd: optionalString(payload?.cwd) ?? input.context.cwd,
-          toolSlug: classifyCodexSessionTool(payload)
+          toolSlug: classifyCodexSessionTool(payload),
+          subagentStartedAtMs: parentTaskId
+            ? timestampMs(payload?.timestamp) ?? timestampMs(sessionRecord.timestamp)
+            : null,
+          subagentOwnTurnStarted: !parentTaskId
+        }
+      };
+    }
+    if (sessionRecord.type === "event_msg" && payload?.type === "task_started") {
+      if (input.context.subagentStartedAtMs === null || input.context.subagentOwnTurnStarted) {
+        return { context: input.context };
+      }
+      const startedAtMs = timestampSecondsMs(payload.started_at);
+      return {
+        context: {
+          ...input.context,
+          subagentOwnTurnStarted:
+            startedAtMs !== null && startedAtMs >= input.context.subagentStartedAtMs
         }
       };
     }
@@ -93,6 +124,9 @@ export async function parseCodexLine(
       };
     }
     if (sessionRecord.type !== "event_msg" || payload?.type !== "token_count") {
+      return { context: input.context };
+    }
+    if (input.context.subagentStartedAtMs !== null && !input.context.subagentOwnTurnStarted) {
       return { context: input.context };
     }
     const usage = objectValue(objectValue(payload.info)?.last_token_usage);
@@ -162,6 +196,16 @@ function subagentParentThreadId(payload: Record<string, unknown> | null): string
   const subagent = objectValue(source?.subagent);
   const threadSpawn = objectValue(subagent?.thread_spawn);
   return optionalString(threadSpawn?.parent_thread_id);
+}
+
+function timestampMs(value: unknown): number | null {
+  if (typeof value !== "string") return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? Math.floor(parsed / 1000) * 1000 : null;
+}
+
+function timestampSecondsMs(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value * 1000 : null;
 }
 
 function isLegacyUsageRecord(record: CodexUsageRecord): boolean {

@@ -1,11 +1,28 @@
 import { describe, expect, it } from "vitest";
 import {
+  taskRebuildRequestSchema,
   taskMetadataAcknowledgementSchema,
   taskMetadataBatchEnvelopeSchema,
   taskMetadataDraftSchema,
   toolSlugSchema,
   usageEventDraftSchema
 } from "./schemas.js";
+
+describe("task rebuild request schema", () => {
+  it("accepts a unique bounded canonical event set", () => {
+    expect(taskRebuildRequestSchema.parse({
+      taskId: "task-1",
+      sourceEventIds: ["event-123456789"]
+    })).toEqual({
+      taskId: "task-1",
+      sourceEventIds: ["event-123456789"]
+    });
+    expect(() => taskRebuildRequestSchema.parse({
+      taskId: "task-1",
+      sourceEventIds: ["duplicate-event", "duplicate-event"]
+    })).toThrow();
+  });
+});
 
 describe("tool slug schema", () => {
   it("accepts the three independent Codex types and the unknown-source fallback", () => {

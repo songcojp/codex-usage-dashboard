@@ -4,9 +4,12 @@ import fs from "node:fs/promises";
 export type ParserState = {
   kind: "codex-jsonl" | "codex-vscode";
   sessionId?: string | null;
+  taskId?: string | null;
   cwd?: string | null;
   model?: string | null;
   toolSlug?: "codex-cli" | "codex-vscode-plugin" | "codex-desktop" | "other";
+  subagentStartedAtMs?: number | null;
+  subagentOwnTurnStarted?: boolean;
 };
 
 export type FileCursorState = {

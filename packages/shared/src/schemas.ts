@@ -63,6 +63,18 @@ export const taskMetadataAcknowledgementSchema = z.object({
   }))
 });
 
+export const taskRebuildRequestSchema = z.object({
+  taskId: z.string().min(1),
+  sourceEventIds: z.array(z.string().min(12)).min(1).max(10_000)
+}).superRefine((value, context) => {
+  if (new Set(value.sourceEventIds).size !== value.sourceEventIds.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "sourceEventIds must be unique"
+    });
+  }
+});
+
 export const ingestBatchSchema = z.object({
   device: z.object({
     name: z.string().min(1),
@@ -78,3 +90,4 @@ export type IngestBatch = z.infer<typeof ingestBatchSchema>;
 export type TaskMetadataDraft = z.infer<typeof taskMetadataDraftSchema>;
 export type TaskMetadataBatchEnvelope = z.infer<typeof taskMetadataBatchEnvelopeSchema>;
 export type TaskMetadataAcknowledgement = z.infer<typeof taskMetadataAcknowledgementSchema>;
+export type TaskRebuildRequest = z.infer<typeof taskRebuildRequestSchema>;

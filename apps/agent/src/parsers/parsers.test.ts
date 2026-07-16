@@ -134,6 +134,7 @@ describe("Codex parser adapters", () => {
 
   it("attributes subagent usage to its parent task while keeping child session identity", async () => {
     const timestamp = "2026-05-30T07:00:03.000Z";
+    const startedAt = Math.floor(Date.parse(timestamp) / 1000);
     const childEvents = await parseCodexFile(
       await writeFixture("subagent.jsonl", [
         {
@@ -154,6 +155,16 @@ describe("Codex parser adapters", () => {
               }
             },
             originator: "Codex Desktop"
+          }
+        },
+        {
+          timestamp,
+          type: "event_msg",
+          payload: {
+            type: "task_started",
+            turn_id: "child-turn",
+            started_at: startedAt,
+            model_context_window: 258400
           }
         },
         {
@@ -191,6 +202,95 @@ describe("Codex parser adapters", () => {
       toolSlug: "codex-desktop"
     }]);
     expect(childEvents[0]?.sourceEventId).not.toBe(parentEvents[0]?.sourceEventId);
+  });
+
+  it("skips inherited parent token history before the subagent own turn starts", async () => {
+    const childTimestamp = "2026-05-30T08:00:00.000Z";
+    const childStartedAt = Math.floor(Date.parse(childTimestamp) / 1000);
+    const events = await parseCodexFile(
+      await writeFixture("forked-subagent.jsonl", [
+        {
+          timestamp: childTimestamp,
+          type: "session_meta",
+          payload: {
+            id: "child-session",
+            timestamp: childTimestamp,
+            cwd: "/workspace/projects/example",
+            source: {
+              subagent: {
+                thread_spawn: {
+                  parent_thread_id: "parent-task",
+                  depth: 1,
+                  agent_path: "/root/review"
+                }
+              }
+            },
+            originator: "Codex Desktop"
+          }
+        },
+        {
+          timestamp: childTimestamp,
+          type: "session_meta",
+          payload: {
+            id: "parent-task",
+            timestamp: "2026-05-30T06:00:00.000Z",
+            cwd: "/workspace/projects/example",
+            source: "vscode",
+            originator: "Codex Desktop"
+          }
+        },
+        {
+          timestamp: childTimestamp,
+          type: "event_msg",
+          payload: {
+            type: "task_started",
+            turn_id: "parent-turn",
+            started_at: childStartedAt - 3600,
+            model_context_window: 258400
+          }
+        },
+        {
+          timestamp: childTimestamp,
+          type: "turn_context",
+          payload: { cwd: "/workspace/projects/example", model: "gpt-5.5" }
+        },
+        tokenCountRecord(childTimestamp, 500, 400, 50),
+        {
+          timestamp: childTimestamp,
+          type: "event_msg",
+          payload: {
+            type: "task_complete",
+            turn_id: "parent-turn"
+          }
+        },
+        {
+          timestamp: childTimestamp,
+          type: "event_msg",
+          payload: {
+            type: "task_started",
+            turn_id: "child-turn",
+            started_at: childStartedAt,
+            model_context_window: 258400
+          }
+        },
+        {
+          timestamp: "2026-05-30T08:00:01.000Z",
+          type: "turn_context",
+          payload: { cwd: "/workspace/projects/example", model: "gpt-5.5" }
+        },
+        tokenCountRecord("2026-05-30T08:00:02.000Z", 100, 25, 40)
+      ].map(JSON.stringify).join("\n"))
+    );
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      taskId: "parent-task",
+      sourceSessionId: "child-session",
+      inputTokens: 75,
+      cacheReadTokens: 25,
+      outputTokens: 40,
+      totalTokens: 140
+    });
   });
 
   it("classifies current session events with an unknown origin as other", async () => {
@@ -377,4 +477,27 @@ function currentSession(input: { source: string; originator: string }): string {
       }
     }
   ].map(JSON.stringify).join("\n");
+}
+
+function tokenCountRecord(
+  timestamp: string,
+  inputTokens: number,
+  cachedInputTokens: number,
+  outputTokens: number
+): Record<string, unknown> {
+  return {
+    timestamp,
+    type: "event_msg",
+    payload: {
+      type: "token_count",
+      info: {
+        last_token_usage: {
+          input_tokens: inputTokens,
+          cached_input_tokens: cachedInputTokens,
+          output_tokens: outputTokens,
+          total_tokens: inputTokens + outputTokens
+        }
+      }
+    }
+  };
 }
