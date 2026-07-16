@@ -71,33 +71,17 @@ fi
 docker compose --env-file .env -f "$compose_file" up -d --build < /dev/null
 docker compose --env-file .env -f "$compose_file" exec -T server node apps/server/dist/db/migrate.js < /dev/null
 
-public_port="${PUBLIC_PORT:-}"
-if [[ -z "$public_port" && -f .env ]]; then
-  public_port="$(grep -E '^PUBLIC_PORT=' .env | tail -n 1 | cut -d= -f2- || true)"
-  public_port="${public_port%\"}"
-  public_port="${public_port#\"}"
-  public_port="${public_port%\'}"
-  public_port="${public_port#\'}"
-fi
-health_url="http://localhost:${public_port:-9000}/api/health"
 for attempt in $(seq 1 30); do
-  if command -v curl >/dev/null 2>&1; then
-    if curl -fsS "$health_url" >/dev/null; then
-      echo "Health check passed: $health_url"
-      exit 0
-    fi
-  else
-    if docker compose --env-file .env -f "$compose_file" exec -T server node -e "const res = await fetch('http://localhost:3000/api/health'); if (!res.ok) process.exit(1);" < /dev/null >/dev/null 2>&1; then
-      echo "Health check passed: /api/health"
-      exit 0
-    fi
+  if docker compose --env-file .env -f "$compose_file" exec -T server node -e "const res = await fetch('http://localhost:3000/api/health'); if (!res.ok) process.exit(1);" < /dev/null >/dev/null 2>&1; then
+    echo "Health check passed: server container /api/health"
+    exit 0
   fi
 
   echo "Waiting for server health check ($attempt/30)..."
   sleep 2
 done
 
-echo "Health check failed: $health_url" >&2
+echo "Health check failed: server container /api/health" >&2
 docker compose --env-file .env -f "$compose_file" logs --tail=100 server < /dev/null >&2
 exit 1
 REMOTE_SCRIPT

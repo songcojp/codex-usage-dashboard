@@ -80,3 +80,15 @@ test("remote compose commands cannot consume the streamed deployment script", as
     assert.match(command, /< \/dev\/null/, command);
   }
 });
+
+test("deployment health check probes the server container instead of the public TLS port", async () => {
+  const source = await readFile(deployScript, "utf8");
+  const remoteScript = source.split("<<'REMOTE_SCRIPT'")[1];
+  assert.ok(remoteScript);
+  assert.doesNotMatch(remoteScript, /public_port=/);
+  assert.doesNotMatch(remoteScript, /curl -fsS/);
+  assert.match(
+    remoteScript,
+    /docker compose .* exec -T server node -e .*http:\/\/localhost:3000\/api\/health/
+  );
+});
