@@ -348,7 +348,7 @@ export function createAdminQueryService(db?: AdminDb): AdminQueryService {
           deviceCount: countDistinct(usageEvents.deviceId).as("device_count"),
           deviceId:
             sql<string | null>`case when count(distinct ${usageEvents.deviceId}) = 1 then min(${usageEvents.deviceId}::text) else null end`.as(
-              "device_id"
+              "single_device_id"
             ),
           projectCount: countDistinct(usageEvents.projectId).as("project_count"),
           projectId:
