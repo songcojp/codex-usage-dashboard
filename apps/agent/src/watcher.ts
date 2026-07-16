@@ -11,6 +11,7 @@ import { DurableQueue } from "./queue.js";
 import { RetryBackoff } from "./retry.js";
 import { matchObservation, registerRename, registerReplacement, registerTruncation, tombstoneMissingFiles } from "./source-registry.js";
 import { readAgentState, writeAgentState, type FileCursorState } from "./state.js";
+import { discoverTaskDatabasePaths } from "./task-metadata-database.js";
 import { discoverTaskIndexPaths } from "./task-metadata-index.js";
 import { syncTaskMetadata, type TaskMetadataSyncResult } from "./task-metadata-sync.js";
 
@@ -462,6 +463,17 @@ export async function resolveExistingWatchRoots(
     homeDir: taskMetadata.homeDir
   })) {
     const root = path.dirname(indexPath);
+    if (!seen.has(root)) {
+      seen.add(root);
+      roots.push(root);
+    }
+  }
+  for (const databasePath of await discoverTaskDatabasePaths({
+    config,
+    env: taskMetadata.env,
+    homeDir: taskMetadata.homeDir
+  })) {
+    const root = path.dirname(databasePath);
     if (!seen.has(root)) {
       seen.add(root);
       roots.push(root);

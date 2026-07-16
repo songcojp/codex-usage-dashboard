@@ -2,7 +2,7 @@
 
 Self-hosted token-usage reporting for Codex CLI, the official Codex VS Code extension, and Codex Desktop. Unknown session origins are retained as `other`; Desktop remains a distinct type and is never labeled as VS Code.
 
-The workstation agent reads local usage files, removes prompts, responses, and raw paths, then uploads token counts, Codex task IDs, and hashed project/device identities. A Fastify server stores events in PostgreSQL and serves the React dashboard.
+The workstation agent reads local usage files, task indexes, and Codex state databases opened read-only, then uploads token counts, Codex task IDs, task/session names, and hashed project/device identities without uploading full prompts, responses, or raw paths. A Fastify server stores events in PostgreSQL and serves the React dashboard.
 
 ## Requirements
 
@@ -111,7 +111,7 @@ For an independent deployment that imports selected history from an existing ins
 
 ## Privacy and security
 
-The agent uploads token counts, timestamps, model names, source types, Codex task IDs, task/session names, and cryptographic hashes. Task/session names may contain user-authored task content. It does not upload prompt text, response text, or full local paths. Review [SECURITY.md](SECURITY.md) before exposing the service publicly.
+The agent uploads token counts, timestamps, model names, source types, Codex task IDs, task/session names, and cryptographic hashes. It reads names from `session_index.jsonl` and, when available, opens sibling Codex `state_*.sqlite` databases read-only to recover historical titles. Task/session names may contain user-authored task content. It does not upload prompt text, response text, or full local paths. Review [SECURITY.md](SECURITY.md) before exposing the service publicly.
 
 ## Contributing
 

@@ -14,4 +14,6 @@ Use HTTPS, strong unique administrator credentials, a random JWT secret of at le
 
 The Agent uploads token usage, timestamps, model and source metadata, Codex task IDs, task/session names, and cryptographic device and project identities. Task/session names may contain user-authored content, so deployments must protect dashboard and database access accordingly.
 
+Task/session names come from `session_index.jsonl` and, when present, Codex `state_*.sqlite` databases opened in read-only mode. Missing, locked, or schema-incompatible Codex databases are skipped and do not block usage ingestion.
+
 The Agent does not upload full prompts, responses, or local filesystem paths.

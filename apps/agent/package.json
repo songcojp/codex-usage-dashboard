@@ -15,6 +15,10 @@
   },
   "dependencies": {
     "@codex-usage-dashboard/shared": "*",
+    "better-sqlite3": "^12.11.1",
     "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
   }
 }

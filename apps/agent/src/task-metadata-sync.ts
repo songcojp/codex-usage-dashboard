@@ -4,6 +4,10 @@ import {
 } from "@codex-usage-dashboard/shared";
 import type { AgentConfig } from "./config.js";
 import {
+  discoverTaskDatabasePaths,
+  parseTaskMetadataDatabase
+} from "./task-metadata-database.js";
+import {
   discoverTaskIndexPaths,
   parseTaskMetadataIndex
 } from "./task-metadata-index.js";
@@ -39,10 +43,19 @@ export async function syncTaskMetadata(input: {
     const parsed = await parseTaskMetadataIndex(indexPath);
     malformed += parsed.rejected;
     for (const task of parsed.tasks) {
-      const current = latest.get(task.taskId);
-      if (!current || Date.parse(task.updatedAt) > Date.parse(current.updatedAt)) {
-        latest.set(task.taskId, task);
+      mergeLatestTask(latest, task);
+    }
+  }
+  const databasePaths = await discoverTaskDatabasePaths(input);
+  for (const databasePath of databasePaths) {
+    try {
+      const parsed = await parseTaskMetadataDatabase(databasePath);
+      malformed += parsed.rejected;
+      for (const task of parsed.tasks) {
+        mergeLatestTask(latest, lowerPriorityDatabaseRevision(task));
       }
+    } catch {
+      malformed += 1;
     }
   }
 
@@ -117,4 +130,21 @@ export async function syncTaskMetadata(input: {
   }
 
   return result;
+}
+
+function mergeLatestTask(
+  latest: Map<string, TaskMetadataDraft>,
+  task: TaskMetadataDraft
+): void {
+  const current = latest.get(task.taskId);
+  if (!current || Date.parse(task.updatedAt) > Date.parse(current.updatedAt)) {
+    latest.set(task.taskId, task);
+  }
+}
+
+function lowerPriorityDatabaseRevision(task: TaskMetadataDraft): TaskMetadataDraft {
+  return {
+    ...task,
+    updatedAt: new Date(Date.parse(task.updatedAt) - 1).toISOString()
+  };
 }

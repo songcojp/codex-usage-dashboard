@@ -204,6 +204,20 @@ describe("agent watcher", () => {
 
     expect(roots).toContain(dir);
   });
+
+  it("watches the directory containing a discovered task metadata database", async () => {
+    const dir = await tempDir();
+    const sourceRoot = path.join(dir, "sessions");
+    await fs.mkdir(sourceRoot, { recursive: true });
+    await fs.writeFile(path.join(dir, "state_5.sqlite"), "");
+
+    const roots = await resolveExistingWatchRoots(config(sourceRoot), {
+      env: {},
+      homeDir: path.join(dir, "home")
+    });
+
+    expect(roots).toContain(dir);
+  });
 });
 
 function queuedEvent(sourceEventId: string): UsageEventDraft {
