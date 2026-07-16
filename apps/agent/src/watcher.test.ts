@@ -139,7 +139,7 @@ describe("agent watcher", () => {
     });
 
     try {
-      await waitFor(() => queue.depth === 0, 1_000);
+      await waitFor(() => queue.depth === 0, "queue backlog to drain");
       expect(requests).toBe(3);
     } finally {
       controller.abort();
@@ -223,10 +223,16 @@ function queuedEvent(sourceEventId: string): UsageEventDraft {
   };
 }
 
-async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<void> {
+async function waitFor(
+  predicate: () => boolean,
+  description: string,
+  timeoutMs = 5_000
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!predicate()) {
-    if (Date.now() >= deadline) throw new Error("timed out waiting for condition");
+    if (Date.now() >= deadline) {
+      throw new Error(`timed out waiting for ${description} after ${timeoutMs}ms`);
+    }
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
 }

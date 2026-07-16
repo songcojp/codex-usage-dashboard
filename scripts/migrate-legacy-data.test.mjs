@@ -24,7 +24,7 @@ const migrationScript = path.join(repoRoot, "scripts", "migrate-legacy-data.sh")
 function runMigration(args, env = {}) {
   return spawnSync("bash", [migrationScript, ...args], {
     cwd: repoRoot,
-    env: { ...process.env, ...env },
+    env: mergeEnvironment(process.env, env),
     encoding: "utf8"
   });
 }
@@ -140,7 +140,7 @@ test("rejects equal source and target directories before docker access", async (
 
   try {
     const result = runMigration([root, `${root}/`, path.join(root, "backups")], {
-      PATH: `${fakeBin}:${process.env.PATH}`
+      PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`
     });
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /source and target directories must be different/);
@@ -178,7 +178,7 @@ test("dry-run checks container and volume identity without stopping services", a
 
   try {
     const result = runMigration(["--dry-run", source, target, path.join(root, "backups")], {
-      PATH: `${fakeBin}:${process.env.PATH}`,
+      PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
       FAKE_DOCKER_LOG: dockerLog
     });
     assert.equal(result.status, 0, result.stderr);
@@ -199,7 +199,7 @@ test("aborts when source and target resolve to the same postgres container", asy
 
   try {
     const result = runMigration(["--dry-run", source, target, path.join(root, "backups")], {
-      PATH: `${fakeBin}:${process.env.PATH}`,
+      PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
       FAKE_DOCKER_LOG: dockerLog,
       FAKE_DOCKER_SCENARIO: "shared-container"
     });
@@ -219,17 +219,19 @@ test("backs up before stopping services and leaves only the source stopped after
 
   try {
     const result = runMigration([source, target, backups], {
-      PATH: `${fakeBin}:${process.env.PATH}`,
+      PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
       FAKE_DOCKER_LOG: dockerLog
     });
     assert.equal(result.status, 0, result.stderr);
     const log = await readFile(dockerLog, "utf8");
     assert.ok(log.indexOf("pg_dump") < log.indexOf(" stop server"), log);
-    assert.match(log, new RegExp(`${escapeRegex(target)}.* start server`));
-    assert.doesNotMatch(log, new RegExp(`${escapeRegex(source)}.* start server`));
+    assert.match(log, deploymentServerCommandPattern("target", "start"));
+    assert.doesNotMatch(log, deploymentServerCommandPattern("source", "start"));
     const backupFiles = await readdir(backups);
     assert.equal(backupFiles.length, 1);
-    assert.equal((await stat(path.join(backups, backupFiles[0]))).mode & 0o777, 0o600);
+    if (process.platform !== "win32") {
+      assert.equal((await stat(path.join(backups, backupFiles[0]))).mode & 0o777, 0o600);
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -243,14 +245,14 @@ test("restarts both previously running servers when promotion fails", async () =
 
   try {
     const result = runMigration([source, target, path.join(root, "backups")], {
-      PATH: `${fakeBin}:${process.env.PATH}`,
+      PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
       FAKE_DOCKER_LOG: dockerLog,
       FAKE_DOCKER_SCENARIO: "promote-failure"
     });
     assert.notEqual(result.status, 0);
     const log = await readFile(dockerLog, "utf8");
-    assert.match(log, new RegExp(`${escapeRegex(source)}.* start server`));
-    assert.match(log, new RegExp(`${escapeRegex(target)}.* start server`));
+    assert.match(log, deploymentServerCommandPattern("source", "start"));
+    assert.match(log, deploymentServerCommandPattern("target", "start"));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -265,7 +267,7 @@ test("retries the target health check while the restarted server is booting", as
 
   try {
     const result = runMigration([source, target, path.join(root, "backups")], {
-      PATH: `${fakeBin}:${process.env.PATH}`,
+      PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
       FAKE_DOCKER_LOG: dockerLog,
       FAKE_DOCKER_SCENARIO: "health-transient",
       FAKE_HEALTH_STATE: healthState
@@ -297,4 +299,22 @@ test("operator guide covers dry-run, cutover, and rollback without private value
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function deploymentServerCommandPattern(deploymentName, command) {
+  return new RegExp(
+    `compose --env-file .*[/\\\\]${escapeRegex(deploymentName)}[/\\\\]\\.env .* ${escapeRegex(command)} server`
+  );
+}
+
+function mergeEnvironment(base, overrides) {
+  const merged = { ...base };
+  for (const [key, value] of Object.entries(overrides)) {
+    const existingKey = process.platform === "win32"
+      ? Object.keys(merged).find((candidate) => candidate.toLowerCase() === key.toLowerCase())
+      : key;
+    if (existingKey && existingKey !== key) delete merged[existingKey];
+    merged[key] = value;
+  }
+  return merged;
 }
