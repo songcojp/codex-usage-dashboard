@@ -15,6 +15,7 @@ describe("TasksTable", () => {
         rows={[
           {
             taskId: "fallback:device-a",
+            taskName: null,
             isFallback: true,
             startedAt: "2026-07-15T10:00:00.000Z",
             lastActivityAt: "2026-07-15T11:00:00.000Z",
@@ -59,5 +60,48 @@ describe("TasksTable", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     expect(onNext).toHaveBeenCalledOnce();
     expect((screen.getByRole("button", { name: "Previous" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  test("renders a task name as primary text with the full task ID beneath it", () => {
+    render(
+      <TasksTable
+        rows={[
+          {
+            taskId: "task-named-123",
+            taskName: "Named task",
+            isFallback: false,
+            startedAt: "2026-07-15T10:00:00.000Z",
+            lastActivityAt: "2026-07-15T11:00:00.000Z",
+            deviceId: "device-a",
+            deviceName: "Device A",
+            deviceCount: 1,
+            projectId: "project-a",
+            projectName: "Project A",
+            projectCount: 1,
+            eventCount: 1,
+            inputTokens: 1,
+            outputTokens: 1,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            totalTokens: 2,
+            costUsd: 0
+          }
+        ]}
+        total={1}
+        limit={25}
+        offset={0}
+        sort="lastActivityAt-desc"
+        onSortChange={() => undefined}
+        onPrevious={() => undefined}
+        onNext={() => undefined}
+        t={(key) => key}
+      />
+    );
+
+    const name = screen.getByText("Named task");
+    const taskId = screen.getByText("task-named-123");
+    expect(name.className).toContain("task-name");
+    expect(taskId.className).toContain("task-id");
+    expect(name.closest("td")?.getAttribute("title")).toBe("task-named-123");
   });
 });

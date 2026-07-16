@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type TokenReportDb } from "../db/client.js";
 import { migrate } from "../db/migrate.js";
-import { dailyUsageRollups, devices, projects, tools, usageEvents } from "../db/schema.js";
+import { dailyUsageRollups, devices, projects, taskMetadata, tools, usageEvents } from "../db/schema.js";
 import { createAdminQueryService } from "./queries.js";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
@@ -412,6 +412,12 @@ describe("admin query service Postgres persistence", () => {
         rawMetaJson: {}
       }
     ]);
+    await db.insert(taskMetadata).values({
+      taskId: `task-alpha-${unique}`,
+      title: "Named task",
+      sourceUpdatedAt: new Date("2026-07-15T12:00:00.000Z"),
+      deviceId: deviceA.id
+    });
 
     const result = await service.getTasks({
       from: "2026-07-15",
@@ -429,6 +435,7 @@ describe("admin query service Postgres persistence", () => {
     expect(result.rows).toEqual([
       expect.objectContaining({
         taskId: `task-alpha-${unique}`,
+        taskName: "Named task",
         isFallback: false,
         startedAt: new Date("2026-07-15T10:00:00.000Z"),
         lastActivityAt: new Date("2026-07-15T11:00:00.000Z"),
@@ -460,6 +467,7 @@ describe("admin query service Postgres persistence", () => {
     });
     expect(fallback.rows[0]).toMatchObject({
       taskId: `fallback:${deviceA.id}`,
+      taskName: null,
       isFallback: true,
       deviceId: deviceA.id,
       deviceName: `Device A ${unique}`,

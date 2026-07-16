@@ -31,4 +31,12 @@ describe("dashboard metric styles", () => {
     expect(styles).toMatch(/\.table-wrap\s*\{[^}]*overflow-x:\s*auto/s);
     expect(styles).not.toMatch(/\.metric-card:hover[^}]*translateY/);
   });
+
+  test("allows task names to wrap above subdued task IDs", () => {
+    const styles = readFileSync(stylesPath, "utf8");
+
+    expect(styles).toMatch(/\.task-identity\s*\{[^}]*flex-direction:\s*column/s);
+    expect(styles).toMatch(/\.task-name\s*\{[^}]*overflow-wrap:\s*anywhere/s);
+    expect(styles).toMatch(/\.task-id\s*\{[^}]*font-family:/s);
+  });
 });

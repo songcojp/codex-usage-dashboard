@@ -50,6 +50,7 @@ export type UsageEvent = UsageSummary & {
 
 export type TaskUsage = Omit<UsageSummary, "eventCount"> & {
   taskId: string;
+  taskName: string | null;
   isFallback: boolean;
   startedAt: string;
   lastActivityAt: string;

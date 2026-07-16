@@ -15,7 +15,7 @@ import {
   sum
 } from "drizzle-orm";
 import { createDb, type TokenReportDb } from "../db/client.js";
-import { devices, modelPrices, projects, tools, usageEvents } from "../db/schema.js";
+import { devices, modelPrices, projects, taskMetadata, tools, usageEvents } from "../db/schema.js";
 import {
   defaultReportingTimeZone,
   reportingDayUtcRange,
@@ -138,6 +138,7 @@ type ProjectRatioRow = {
 
 type TaskAggregateRow = {
   taskId: string;
+  taskName: string | null;
   startedAt: Date;
   lastActivityAt: Date;
   deviceId: string | null;
@@ -379,6 +380,7 @@ export function createAdminQueryService(db?: AdminDb): AdminQueryService {
       const rows = await adminDb()
         .select({
           taskId: taskGroups.taskId,
+          taskName: taskMetadata.title,
           startedAt: taskGroups.startedAt,
           lastActivityAt: taskGroups.lastActivityAt,
           deviceId: taskGroups.deviceId,
@@ -396,6 +398,7 @@ export function createAdminQueryService(db?: AdminDb): AdminQueryService {
           costUsd: taskGroups.costUsd
         })
         .from(taskGroups)
+        .leftJoin(taskMetadata, eq(taskMetadata.taskId, taskGroups.taskId))
         .leftJoin(devices, sql`${devices.id} = ${taskGroups.deviceId}::uuid`)
         .leftJoin(projects, sql`${projects.id} = ${taskGroups.projectId}::uuid`)
         .orderBy(orderBy, asc(taskGroups.taskId))
@@ -710,6 +713,7 @@ export function createProjectRatioResponse(
 export function normalizeTaskRow(row: TaskAggregateRow) {
   return {
     taskId: row.taskId,
+    taskName: row.taskName ?? null,
     isFallback: row.taskId.startsWith("fallback:"),
     startedAt: row.startedAt,
     lastActivityAt: row.lastActivityAt,
