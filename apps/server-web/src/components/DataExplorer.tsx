@@ -9,7 +9,7 @@ type DataExplorerProps = {
   renderPanel: (tab: DashboardTab) => ReactNode;
 };
 
-const tabs: DashboardTab[] = ["events", "tasks", "devices", "projects", "prices"];
+const tabs: DashboardTab[] = ["tasks", "events", "devices", "projects", "prices"];
 
 export function DataExplorer({
   activeTab,
