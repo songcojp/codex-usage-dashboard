@@ -83,6 +83,22 @@ export const usageEvents = pgTable(
   ]
 );
 
+export const usageEventCleanupBackups = pgTable(
+  "usage_event_cleanup_backups",
+  {
+    batchId: uuid("batch_id").notNull(),
+    usageEventId: uuid("usage_event_id").notNull(),
+    backedUpAt: timestamp("backed_up_at", { withTimezone: true }).defaultNow().notNull(),
+    rowData: jsonb("row_data").notNull()
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.batchId, table.usageEventId],
+      name: "usage_event_cleanup_backups_pk"
+    })
+  ]
+);
+
 export const taskMetadata = pgTable("task_metadata", {
   taskId: text("task_id").primaryKey(),
   title: text("title").notNull(),

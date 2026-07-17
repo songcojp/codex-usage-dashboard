@@ -1,7 +1,14 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { calculateMigrationChecksum, verifyAppliedMigrationChecksum } from "./migrate.js";
-import { dailyUsageRollups, modelPrices, projects, taskMetadata, usageEvents } from "./schema.js";
+import {
+  dailyUsageRollups,
+  modelPrices,
+  projects,
+  taskMetadata,
+  usageEventCleanupBackups,
+  usageEvents
+} from "./schema.js";
 
 const migrationsUrl = new URL("./migrations/", import.meta.url);
 const migrationFiles = readdirSync(migrationsUrl).filter((file) => file.endsWith(".sql")).sort();
@@ -13,6 +20,13 @@ const bigintMigrationSql = existsSync(bigintMigrationUrl)
 const taskMetadataMigrationUrl = new URL("./migrations/0004_task_metadata.sql", import.meta.url);
 const taskMetadataMigrationSql = existsSync(taskMetadataMigrationUrl)
   ? readFileSync(taskMetadataMigrationUrl, "utf8")
+  : "";
+const cleanupBackupMigrationUrl = new URL(
+  "./migrations/0005_usage_event_cleanup_backups.sql",
+  import.meta.url
+);
+const cleanupBackupMigrationSql = existsSync(cleanupBackupMigrationUrl)
+  ? readFileSync(cleanupBackupMigrationUrl, "utf8")
   : "";
 
 describe("database schema", () => {
@@ -26,6 +40,9 @@ describe("database schema", () => {
     expect(taskMetadata.title.notNull).toBe(true);
     expect(taskMetadata.sourceUpdatedAt.name).toBe("source_updated_at");
     expect(taskMetadata.deviceId.name).toBe("device_id");
+    expect(usageEventCleanupBackups.batchId.name).toBe("batch_id");
+    expect(usageEventCleanupBackups.usageEventId.name).toBe("usage_event_id");
+    expect(usageEventCleanupBackups.rowData.name).toBe("row_data");
     expect(projects.repoHash.notNull).toBe(true);
     expect(projects.repoHash.default).toBe("");
     expect(projects.remoteHash.notNull).toBe(true);
@@ -58,7 +75,8 @@ describe("public database baseline", () => {
       "0001_initial.sql",
       "0002_bigint_usage_counters.sql",
       "0003_usage_event_task_ids.sql",
-      "0004_task_metadata.sql"
+      "0004_task_metadata.sql",
+      "0005_usage_event_cleanup_backups.sql"
     ]);
     for (const table of ["usage_events", "daily_usage_rollups"]) {
       expect(bigintMigrationSql).toContain(`ALTER TABLE "${table}"`);
@@ -77,6 +95,11 @@ describe("public database baseline", () => {
     expect(taskMetadataMigrationSql).toContain('CREATE TABLE "task_metadata"');
     expect(taskMetadataMigrationSql).toContain('PRIMARY KEY');
     expect(taskMetadataMigrationSql).toContain('REFERENCES "devices" ("id")');
+    expect(cleanupBackupMigrationSql).toContain(
+      'CREATE TABLE IF NOT EXISTS "usage_event_cleanup_backups"'
+    );
+    expect(cleanupBackupMigrationSql).toContain('PRIMARY KEY ("batch_id", "usage_event_id")');
+    expect(cleanupBackupMigrationSql).toContain('"usage_event_cleanup_backups_event_idx"');
   });
 
   it("creates every business table and required index", () => {

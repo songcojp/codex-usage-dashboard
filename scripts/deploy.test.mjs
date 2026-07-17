@@ -109,3 +109,17 @@ test("deployment smoke-tests the production task query after migrations", async 
   assert.match(remoteScript, /sortBy: 'lastActivityAt'/);
   assert.match(remoteScript, /timeZone: 'Asia\/Tokyo'/);
 });
+
+test("production duplicate maintenance is manual, environment-gated, and confirms cleanup", async () => {
+  const workflow = await readFile(
+    path.join(repoRoot, ".github", "workflows", "production-data-maintenance.yml"),
+    "utf8"
+  );
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /environment: production/);
+  assert.match(workflow, /- audit\s+- cleanup/);
+  assert.doesNotMatch(workflow, /^\s*push:/m);
+  assert.match(workflow, /exact-duplicates-cli\.js --audit/);
+  assert.match(workflow, /exact-duplicates-cli\.js --cleanup --confirm/);
+  assert.match(workflow, /\/opt\/codex-usage-dashboard\|\/srv\/codex-usage-dashboard/);
+});
