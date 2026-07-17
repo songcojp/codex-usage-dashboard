@@ -123,3 +123,17 @@ test("production duplicate maintenance is manual, environment-gated, and confirm
   assert.match(workflow, /exact-duplicates-cli\.js --cleanup --confirm/);
   assert.match(workflow, /\/opt\/codex-usage-dashboard\|\/srv\/codex-usage-dashboard/);
 });
+
+test("legacy fallback duplicate maintenance validates a device UUID and confirms cleanup", async () => {
+  const workflow = await readFile(
+    path.join(repoRoot, ".github", "workflows", "legacy-fallback-data-maintenance.yml"),
+    "utf8"
+  );
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /environment: production/);
+  assert.doesNotMatch(workflow, /^\s*push:/m);
+  assert.match(workflow, /DEVICE_ID.*=~ \^\[0-9a-fA-F\]/);
+  assert.match(workflow, /legacy-fallback-duplicates-cli\.js --audit --device-id/);
+  assert.match(workflow, /legacy-fallback-duplicates-cli\.js --cleanup --confirm --device-id/);
+  assert.match(workflow, /\/opt\/codex-usage-dashboard\|\/srv\/codex-usage-dashboard/);
+});
