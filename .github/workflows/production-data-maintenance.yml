@@ -1,0 +1,80 @@
+name: Production Data Maintenance
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Exact duplicate maintenance mode
+        required: true
+        type: choice
+        options:
+          - audit
+          - cleanup
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-data-maintenance
+  cancel-in-progress: false
+
+jobs:
+  exact-duplicate-maintenance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+
+    steps:
+      - name: Install SSH key
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          : "${DEPLOY_HOST:?DEPLOY_HOST secret is required}"
+          : "${DEPLOY_KNOWN_HOSTS:?DEPLOY_KNOWN_HOSTS secret is required}"
+          : "${DEPLOY_SSH_KEY:?DEPLOY_SSH_KEY secret is required}"
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          ssh-keygen -l -f ~/.ssh/known_hosts >/dev/null
+
+      - name: Run exact duplicate maintenance
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          : "${DEPLOY_HOST:?DEPLOY_HOST secret is required}"
+          : "${DEPLOY_PATH:?DEPLOY_PATH variable is required}"
+          : "${DEPLOY_USER:?DEPLOY_USER secret is required}"
+
+          case "${DEPLOY_PATH%/}" in
+            /opt/codex-usage-dashboard|/srv/codex-usage-dashboard) ;;
+            *)
+              echo "DEPLOY_PATH must be the dedicated Codex Usage Dashboard path." >&2
+              exit 1
+              ;;
+          esac
+
+          case "$MODE" in
+            audit)
+              ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$DEPLOY_USER@$DEPLOY_HOST" \
+                "cd '${DEPLOY_PATH%/}' && docker compose --env-file .env -f deploy/docker-compose.yml exec -T server node apps/server/dist/maintenance/exact-duplicates-cli.js --audit"
+              ;;
+            cleanup)
+              ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$DEPLOY_USER@$DEPLOY_HOST" \
+                "cd '${DEPLOY_PATH%/}' && docker compose --env-file .env -f deploy/docker-compose.yml exec -T server node apps/server/dist/maintenance/exact-duplicates-cli.js --cleanup --confirm"
+              ;;
+            *)
+              echo "Unsupported maintenance mode." >&2
+              exit 1
+              ;;
+          esac
