@@ -28,6 +28,10 @@ const cleanupBackupMigrationUrl = new URL(
 const cleanupBackupMigrationSql = existsSync(cleanupBackupMigrationUrl)
   ? readFileSync(cleanupBackupMigrationUrl, "utf8")
   : "";
+const gpt55PriceMigrationUrl = new URL("./migrations/0006_seed_gpt_5_5_price.sql", import.meta.url);
+const gpt55PriceMigrationSql = existsSync(gpt55PriceMigrationUrl)
+  ? readFileSync(gpt55PriceMigrationUrl, "utf8")
+  : "";
 
 describe("database schema", () => {
   it("maps event, project identity, and model-price columns", () => {
@@ -76,7 +80,8 @@ describe("public database baseline", () => {
       "0002_bigint_usage_counters.sql",
       "0003_usage_event_task_ids.sql",
       "0004_task_metadata.sql",
-      "0005_usage_event_cleanup_backups.sql"
+      "0005_usage_event_cleanup_backups.sql",
+      "0006_seed_gpt_5_5_price.sql"
     ]);
     for (const table of ["usage_events", "daily_usage_rollups"]) {
       expect(bigintMigrationSql).toContain(`ALTER TABLE "${table}"`);
@@ -100,6 +105,11 @@ describe("public database baseline", () => {
     );
     expect(cleanupBackupMigrationSql).toContain('PRIMARY KEY ("batch_id", "usage_event_id")');
     expect(cleanupBackupMigrationSql).toContain('"usage_event_cleanup_backups_event_idx"');
+  });
+
+  it("adds the missing GPT-5.5 price without overwriting an admin override", () => {
+    expect(gpt55PriceMigrationSql).toContain("('gpt-5.5', 5.00, 30.00, 0.50, 6.25)");
+    expect(gpt55PriceMigrationSql).toContain('ON CONFLICT ("model") DO NOTHING');
   });
 
   it("creates every business table and required index", () => {
