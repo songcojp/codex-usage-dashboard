@@ -338,12 +338,12 @@ export function createTrendChartOption(
       makeSeries(t("Input"), values.input, colors[1]),
       makeSeries(t("Output"), values.output, colors[2]),
       makeSeries(t("Cache"), values.cache, colors[3]),
-      makeSeries(t("Cost"), values.cost, colors[4], 2.5)
+      makeSeries(t("Cost"), values.cost, colors[4], 2.5, formatCostUsd)
     ];
     const costSeries = [
-      makeSeries(t("Input cost"), values.inputCost, colors[1]),
-      makeSeries(t("Cache cost"), values.cacheCost, colors[3]),
-      makeSeries(t("Output cost"), values.outputCost, colors[2])
+      makeSeries(t("Input cost"), values.inputCost, colors[1], 2, formatCostUsd),
+      makeSeries(t("Cache cost"), values.cacheCost, colors[3], 2, formatCostUsd),
+      makeSeries(t("Output cost"), values.outputCost, colors[2], 2, formatCostUsd)
     ];
     visibleSeries = trendFilter === "cost" ? costSeries : trendFilter === "tokens" ? series.slice(0, 4) : series;
   }
@@ -357,7 +357,11 @@ export function createTrendChartOption(
       backgroundColor: theme === "dark" ? "#0d213f" : "#ffffff",
       borderColor: axisLineColor,
       textStyle: { color: theme === "dark" ? "#f5f7fa" : "#0b1830" },
-      valueFormatter: isRatio ? (value: any) => `${value}%` : undefined
+      valueFormatter: isRatio
+        ? (value: number | string) => `${value}%`
+        : trendFilter === "cost"
+        ? formatCostUsd
+        : undefined
     },
     legend: { top: 0, right: 0, textStyle: { color: textColor } },
     xAxis: {
@@ -372,7 +376,11 @@ export function createTrendChartOption(
       max: isRatio ? 100 : undefined,
       axisLabel: {
         color: textColor,
-        formatter: (value: number) => isRatio ? `${value}%` : compactNumber(value, language)
+        formatter: (value: number) => isRatio
+          ? `${value}%`
+          : trendFilter === "cost"
+          ? formatCostUsd(value)
+          : compactNumber(value, language)
       },
       splitLine: { lineStyle: { color: splitLineColor } }
     },
@@ -380,13 +388,20 @@ export function createTrendChartOption(
   };
 }
 
-function makeSeries(name: string, data: number[], color: string, width = 2) {
+function makeSeries(
+  name: string,
+  data: number[],
+  color: string,
+  width = 2,
+  valueFormatter?: (value: number | string) => string
+) {
   return {
     name,
     type: "line",
     smooth: true,
     data,
     symbolSize: 5,
+    ...(valueFormatter ? { tooltip: { valueFormatter } } : {}),
     itemStyle: { color },
     lineStyle: { width },
     areaStyle: {
@@ -403,6 +418,10 @@ function makeSeries(name: string, data: number[], color: string, width = 2) {
       }
     }
   };
+}
+
+function formatCostUsd(value: number | string): string {
+  return `$${Number(value).toFixed(2)}`;
 }
 
 function TrendChart({

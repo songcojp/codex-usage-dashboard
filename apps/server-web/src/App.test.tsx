@@ -130,7 +130,8 @@ describe("admin dashboard rendering", () => {
     expect(screen.getByText("Cache read")).toBeTruthy();
     expect(screen.queryByText("Cache write")).toBeNull();
     expect(screen.getAllByText("Cost").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("$0.1250").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("$0.13").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("$0.1250")).toBeNull();
     expect(screen.getByText("2026-05-30 12:00 UTC")).toBeTruthy();
     expect(screen.queryByLabelText("Token metrics")?.textContent).not.toContain("Events");
     expect((screen.getByRole("button", { name: "Previous" }) as HTMLButtonElement).disabled).toBe(
