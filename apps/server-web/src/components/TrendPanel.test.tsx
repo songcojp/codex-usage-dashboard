@@ -8,7 +8,7 @@ const emptyProjectRatios = { daily: [], total: [] };
 const identity = (key: string) => key;
 
 describe("createTrendChartOption", () => {
-  test("filters the chart to cost without changing its source points", () => {
+  test("filters the chart to input, cache, and output costs without changing its source points", () => {
     const points = [
       {
         day: "2026-05-30",
@@ -18,13 +18,55 @@ describe("createTrendChartOption", () => {
         cacheReadTokens: 20,
         cacheWriteTokens: 10,
         costUsd: 0.125,
+        inputCostUsd: 0.04,
+        cacheCostUsd: 0.025,
+        outputCostUsd: 0.06,
         eventCount: 1
       }
     ];
     const option = createTrendChartOption(points, (key) => key, "en", "light", "daily", "cost");
-    expect(option.series).toHaveLength(1);
-    expect(option.series[0]).toEqual(expect.objectContaining({ name: "Cost", data: [0.125] }));
+    expect(option.series).toHaveLength(3);
+    expect(option.series[0]).toEqual(expect.objectContaining({ name: "Input cost", data: [0.04] }));
+    expect(option.series[1]).toEqual(expect.objectContaining({ name: "Cache cost", data: [0.025] }));
+    expect(option.series[2]).toEqual(expect.objectContaining({ name: "Output cost", data: [0.06] }));
     expect(points[0].cacheWriteTokens).toBe(10);
+  });
+
+  test("accumulates input, cache, and output cost series independently", () => {
+    const points = [
+      {
+        day: "2026-05-30",
+        totalTokens: 100,
+        inputTokens: 40,
+        outputTokens: 30,
+        cacheReadTokens: 20,
+        cacheWriteTokens: 10,
+        costUsd: 6,
+        inputCostUsd: 1,
+        cacheCostUsd: 2,
+        outputCostUsd: 3,
+        eventCount: 1
+      },
+      {
+        day: "2026-05-31",
+        totalTokens: 200,
+        inputTokens: 80,
+        outputTokens: 60,
+        cacheReadTokens: 40,
+        cacheWriteTokens: 20,
+        costUsd: 15,
+        inputCostUsd: 4,
+        cacheCostUsd: 5,
+        outputCostUsd: 6,
+        eventCount: 1
+      }
+    ];
+
+    const option = createTrendChartOption(points, identity, "en", "light", "cumulative", "cost");
+
+    expect(option.series[0]).toEqual(expect.objectContaining({ name: "Input cost", data: [1, 5] }));
+    expect(option.series[1]).toEqual(expect.objectContaining({ name: "Cache cost", data: [2, 7] }));
+    expect(option.series[2]).toEqual(expect.objectContaining({ name: "Output cost", data: [3, 9] }));
   });
 
   test("generates correct options for token-ratio and cost-ratio", () => {
@@ -223,6 +265,9 @@ describe("TrendPanel controls", () => {
     expect(translations.zh.Total).toBe("总量");
     expect(translations.zh["No tools"]).toBe("无工具数据");
     expect(translations.zh["No project usage"]).toBe("无项目用量数据");
+    expect(translations.zh["Input cost"]).toBe("输入成本");
+    expect(translations.zh["Cache cost"]).toBe("缓存成本");
+    expect(translations.zh["Output cost"]).toBe("输出成本");
   });
 
   test("labels project total mode separately from cumulative trends", () => {
