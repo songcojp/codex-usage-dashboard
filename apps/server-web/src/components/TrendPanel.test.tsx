@@ -29,7 +29,34 @@ describe("createTrendChartOption", () => {
     expect(option.series[0]).toEqual(expect.objectContaining({ name: "Input cost", data: [0.04] }));
     expect(option.series[1]).toEqual(expect.objectContaining({ name: "Cache cost", data: [0.025] }));
     expect(option.series[2]).toEqual(expect.objectContaining({ name: "Output cost", data: [0.06] }));
+    expect(option.tooltip.valueFormatter(0.025)).toBe("$0.03");
+    expect(option.yAxis.axisLabel.formatter(0.025)).toBe("$0.03");
+    expect(option.series[1].tooltip.valueFormatter(0.025)).toBe("$0.03");
     expect(points[0].cacheWriteTokens).toBe(10);
+  });
+
+  test("formats the total cost series to two decimals without formatting token series as currency", () => {
+    const points = [
+      {
+        day: "2026-05-30",
+        totalTokens: 100,
+        inputTokens: 40,
+        outputTokens: 30,
+        cacheReadTokens: 20,
+        cacheWriteTokens: 10,
+        costUsd: 0.125,
+        inputCostUsd: 0.04,
+        cacheCostUsd: 0.025,
+        outputCostUsd: 0.06,
+        eventCount: 1
+      }
+    ];
+
+    const option = createTrendChartOption(points, identity, "en", "light", "daily", "all");
+
+    expect(option.series[0].tooltip).toBeUndefined();
+    expect(option.series[4].data).toEqual([0.125]);
+    expect(option.series[4].tooltip.valueFormatter(0.125)).toBe("$0.13");
   });
 
   test("accumulates input, cache, and output cost series independently", () => {

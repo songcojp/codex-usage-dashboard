@@ -126,7 +126,7 @@ function formatNumber(value: number): string {
 }
 
 function formatCurrency(value: number): string {
-  return `$${value.toFixed(4)}`;
+  return `$${value.toFixed(2)}`;
 }
 
 function formatDateTime(value: string): string {

@@ -53,7 +53,7 @@ describe("TasksTable", () => {
     expect(screen.getByText("Multiple (2)")).toBeTruthy();
     expect(screen.getByText("Project A")).toBeTruthy();
     expect(screen.getByText("16")).toBeTruthy();
-    expect(screen.getByText("$0.1000")).toBeTruthy();
+    expect(screen.getByText("$0.10")).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("Sort"), { target: { value: "eventCount-asc" } });
     expect(onSortChange).toHaveBeenCalledWith("eventCount-asc");
