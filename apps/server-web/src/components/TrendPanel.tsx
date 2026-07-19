@@ -328,7 +328,10 @@ export function createTrendChartOption(
       input: processedPoints.map((point) => point.inputTokens),
       output: processedPoints.map((point) => point.outputTokens),
       cache: processedPoints.map((point) => point.cacheReadTokens + point.cacheWriteTokens),
-      cost: processedPoints.map((point) => point.costUsd)
+      cost: processedPoints.map((point) => point.costUsd),
+      inputCost: processedPoints.map((point) => point.inputCostUsd ?? 0),
+      cacheCost: processedPoints.map((point) => point.cacheCostUsd ?? 0),
+      outputCost: processedPoints.map((point) => point.outputCostUsd ?? 0)
     };
     const series = [
       makeSeries(t("Total tokens"), values.total, colors[0], 3),
@@ -337,7 +340,12 @@ export function createTrendChartOption(
       makeSeries(t("Cache"), values.cache, colors[3]),
       makeSeries(t("Cost"), values.cost, colors[4], 2.5)
     ];
-    visibleSeries = trendFilter === "cost" ? [series[4]] : trendFilter === "tokens" ? series.slice(0, 4) : series;
+    const costSeries = [
+      makeSeries(t("Input cost"), values.inputCost, colors[1]),
+      makeSeries(t("Cache cost"), values.cacheCost, colors[3]),
+      makeSeries(t("Output cost"), values.outputCost, colors[2])
+    ];
+    visibleSeries = trendFilter === "cost" ? costSeries : trendFilter === "tokens" ? series.slice(0, 4) : series;
   }
 
   return {
