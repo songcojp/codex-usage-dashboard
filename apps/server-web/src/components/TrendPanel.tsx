@@ -348,6 +348,10 @@ export function createTrendChartOption(
     visibleSeries = trendFilter === "cost" ? costSeries : trendFilter === "tokens" ? series.slice(0, 4) : series;
   }
 
+  const dailyTokenShareTooltipFormatter = trendMode === "daily" && (trendFilter === "tokens" || trendFilter === "all")
+    ? createDailyTokenShareTooltipFormatter(processedPoints, t, language)
+    : undefined;
+
   return {
     backgroundColor: theme === "dark" ? "#0d1b2e" : "#ffffff",
     color: visibleSeries.map((item) => item.itemStyle.color),
@@ -357,11 +361,15 @@ export function createTrendChartOption(
       backgroundColor: theme === "dark" ? "#0d213f" : "#ffffff",
       borderColor: axisLineColor,
       textStyle: { color: theme === "dark" ? "#f5f7fa" : "#0b1830" },
-      valueFormatter: isRatio
-        ? (value: number | string) => `${value}%`
-        : trendFilter === "cost"
-        ? formatCostUsd
-        : undefined
+      ...(dailyTokenShareTooltipFormatter
+        ? { formatter: dailyTokenShareTooltipFormatter }
+        : {
+            valueFormatter: isRatio
+              ? (value: number | string) => `${value}%`
+              : trendFilter === "cost"
+              ? formatCostUsd
+              : undefined
+          })
     },
     legend: { top: 0, right: 0, textStyle: { color: textColor } },
     xAxis: {
@@ -422,6 +430,76 @@ function makeSeries(
 
 function formatCostUsd(value: number | string): string {
   return `$${Number(value).toFixed(2)}`;
+}
+
+type AxisTooltipParam = {
+  axisValueLabel?: string;
+  data?: number | string;
+  dataIndex?: number;
+  marker?: string;
+  name?: string;
+  seriesName?: string;
+  value?: number | string;
+};
+
+function createDailyTokenShareTooltipFormatter(points: TrendPoint[], t: Translate, language: Language) {
+  const inputName = t("Input");
+  const outputName = t("Output");
+  const cacheName = t("Cache");
+  const costName = t("Cost");
+  const tokenSeriesNames = new Set([inputName, outputName, cacheName]);
+
+  return (params: AxisTooltipParam | AxisTooltipParam[]) => {
+    const items = Array.isArray(params) ? params : [params];
+    const dataIndex = Number(items[0]?.dataIndex ?? 0);
+    const point = points[dataIndex];
+    const tokenTotal = point
+      ? point.inputTokens + point.outputTokens + point.cacheReadTokens + point.cacheWriteTokens
+      : 0;
+    const shares: Record<string, number> = point && tokenTotal > 0
+      ? {
+          [inputName]: point.inputTokens / tokenTotal,
+          [outputName]: point.outputTokens / tokenTotal,
+          [cacheName]: (point.cacheReadTokens + point.cacheWriteTokens) / tokenTotal
+        }
+      : {};
+
+    const title = items[0]?.axisValueLabel ?? items[0]?.name ?? (point ? formatUtcDateLabel(point.day) : "");
+    const rows = [`<strong>${escapeHtml(String(title))}</strong>`];
+
+    for (const item of items) {
+      const seriesName = item.seriesName ?? "";
+      const rawValue = item.value ?? item.data ?? 0;
+      const formattedValue = seriesName === costName
+        ? formatCostUsd(rawValue)
+        : formatTokenValue(rawValue, language);
+      const share = tokenSeriesNames.has(seriesName) && shares[seriesName] !== undefined
+        ? ` (${formatPercent(shares[seriesName])})`
+        : "";
+
+      rows.push(`${item.marker ?? ""}${escapeHtml(seriesName)}: ${escapeHtml(formattedValue)}${share}`);
+    }
+
+    return rows.join("<br/>");
+  };
+}
+
+function formatTokenValue(value: number | string, language: Language): string {
+  const locales: Record<Language, string> = { zh: "zh-CN", ja: "ja-JP", en: "en-US", ko: "ko-KR" };
+  return Number(value).toLocaleString(locales[language], { maximumFractionDigits: 0 });
+}
+
+function formatPercent(value: number): string {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 function TrendChart({

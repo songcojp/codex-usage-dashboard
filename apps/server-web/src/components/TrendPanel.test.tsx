@@ -6,6 +6,7 @@ import { createTrendChartOption, TrendPanel } from "./TrendPanel.js";
 
 const emptyProjectRatios = { daily: [], total: [] };
 const identity = (key: string) => key;
+const translateEn = (key: string) => translations.en[key] ?? key;
 
 describe("createTrendChartOption", () => {
   test("filters the chart to input, cache, and output costs without changing its source points", () => {
@@ -57,6 +58,59 @@ describe("createTrendChartOption", () => {
     expect(option.series[0].tooltip).toBeUndefined();
     expect(option.series[4].data).toEqual([0.125]);
     expect(option.series[4].tooltip.valueFormatter(0.125)).toBe("$0.13");
+  });
+
+  test("adds daily token category shares to the token tooltip", () => {
+    const points = [
+      {
+        day: "2026-05-30",
+        totalTokens: 100,
+        inputTokens: 40,
+        outputTokens: 30,
+        cacheReadTokens: 20,
+        cacheWriteTokens: 10,
+        costUsd: 0.125,
+        eventCount: 1
+      }
+    ];
+
+    const option = createTrendChartOption(points, identity, "en", "light", "daily", "tokens");
+    const tooltip = option.tooltip.formatter([
+      { axisValueLabel: "05-30", dataIndex: 0, marker: "", seriesName: "Total tokens", value: 100 },
+      { axisValueLabel: "05-30", dataIndex: 0, marker: "", seriesName: "Input", value: 40 },
+      { axisValueLabel: "05-30", dataIndex: 0, marker: "", seriesName: "Output", value: 30 },
+      { axisValueLabel: "05-30", dataIndex: 0, marker: "", seriesName: "Cache", value: 30 }
+    ]);
+
+    expect(tooltip).toContain("Total tokens: 100");
+    expect(tooltip).toContain("Input: 40 (40.0%)");
+    expect(tooltip).toContain("Output: 30 (30.0%)");
+    expect(tooltip).toContain("Cache: 30 (30.0%)");
+  });
+
+  test("keeps cumulative token tooltips numeric-only", () => {
+    const option = createTrendChartOption(
+      [
+        {
+          day: "2026-05-30",
+          totalTokens: 100,
+          inputTokens: 40,
+          outputTokens: 30,
+          cacheReadTokens: 20,
+          cacheWriteTokens: 10,
+          costUsd: 0.125,
+          eventCount: 1
+        }
+      ],
+      identity,
+      "en",
+      "light",
+      "cumulative",
+      "tokens"
+    );
+
+    expect(option.tooltip.formatter).toBeUndefined();
+    expect(option.tooltip.valueFormatter).toBeUndefined();
   });
 
   test("accumulates input, cache, and output cost series independently", () => {
@@ -286,6 +340,19 @@ describe("createTrendChartOption", () => {
 });
 
 describe("TrendPanel controls", () => {
+  test("uses share terminology in English ratio controls", () => {
+    expect(translations.en["Tool ratio"]).toBe("Tool share");
+    expect(translations.en["Project ratio"]).toBe("Project share");
+    expect(translations.en["Token ratio"]).toBe("Token share");
+    expect(translations.en["Cost ratio"]).toBe("Cost share");
+    expect(translations.en["Input ratio"]).toBe("Input share");
+    expect(translations.en["Output ratio"]).toBe("Output share");
+    expect(translations.en["Cache ratio"]).toBe("Cache share");
+    expect(translations.en["Input cost ratio"]).toBe("Input cost share");
+    expect(translations.en["Output cost ratio"]).toBe("Output cost share");
+    expect(translations.en["Cache cost ratio"]).toBe("Cache cost share");
+  });
+
   test("uses tool and project terminology in Chinese", () => {
     expect(translations.zh["Tool ratio"]).toBe("工具占比");
     expect(translations.zh["Project ratio"]).toBe("项目占比");
@@ -306,12 +373,12 @@ describe("TrendPanel controls", () => {
         language="en"
         meta="2026-07-01 to 2026-07-15 (UTC)"
         theme="light"
-        t={identity}
+        t={translateEn}
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Project ratio" }));
-    expect(screen.getByRole("heading", { name: "Project ratio" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Project share" }));
+    expect(screen.getByRole("heading", { name: "Project share" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Total" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "App ratio" })).toBeNull();
     expect(screen.getByText("2026-07-01 to 2026-07-15 (UTC)")).toBeTruthy();
@@ -319,7 +386,7 @@ describe("TrendPanel controls", () => {
     fireEvent.click(screen.getByRole("button", { name: "Total" }));
     expect(screen.queryByText("2026-07-01 to 2026-07-15 (UTC)")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Tool ratio" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tool share" }));
     expect(screen.getByRole("button", { name: "Cumulative" })).toBeTruthy();
   });
 });
