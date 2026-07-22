@@ -6,7 +6,6 @@ import { createTrendChartOption, TrendPanel } from "./TrendPanel.js";
 
 const emptyProjectRatios = { daily: [], total: [] };
 const identity = (key: string) => key;
-const translateEn = (key: string) => translations.en[key] ?? key;
 
 describe("createTrendChartOption", () => {
   test("filters the chart to input, cache, and output costs without changing its source points", () => {
@@ -60,7 +59,7 @@ describe("createTrendChartOption", () => {
     expect(option.series[4].tooltip.valueFormatter(0.125)).toBe("$0.13");
   });
 
-  test("adds daily token category shares to the token tooltip", () => {
+  test("adds daily token category percentages to the token tooltip", () => {
     const points = [
       {
         day: "2026-05-30",
@@ -175,21 +174,21 @@ describe("createTrendChartOption", () => {
     const tokenOption = createTrendChartOption(points, (key) => key, "en", "light", "daily", "token-ratio");
     expect(tokenOption.series).toHaveLength(3);
     // input = 50%, output = 30%, cache = (15+5)/100 = 20%
-    expect(tokenOption.series[0]).toEqual(expect.objectContaining({ name: "Input ratio", data: [50] }));
-    expect(tokenOption.series[1]).toEqual(expect.objectContaining({ name: "Output ratio", data: [30] }));
-    expect(tokenOption.series[2]).toEqual(expect.objectContaining({ name: "Cache ratio", data: [20] }));
+    expect(tokenOption.series[0]).toEqual(expect.objectContaining({ name: "Input", data: [50] }));
+    expect(tokenOption.series[1]).toEqual(expect.objectContaining({ name: "Output", data: [30] }));
+    expect(tokenOption.series[2]).toEqual(expect.objectContaining({ name: "Cache", data: [20] }));
 
     // 2. cost-ratio
     const costOption = createTrendChartOption(points, (key) => key, "en", "light", "daily", "cost-ratio");
     expect(costOption.series).toHaveLength(3);
     // input = 0.5/1.0 = 50%, output = 0.3/1.0 = 30%, cache = 0.2/1.0 = 20%
-    expect(costOption.series[0]).toEqual(expect.objectContaining({ name: "Input cost ratio", data: [50] }));
-    expect(costOption.series[1]).toEqual(expect.objectContaining({ name: "Output cost ratio", data: [30] }));
-    expect(costOption.series[2]).toEqual(expect.objectContaining({ name: "Cache cost ratio", data: [20] }));
+    expect(costOption.series[0]).toEqual(expect.objectContaining({ name: "Input cost", data: [50] }));
+    expect(costOption.series[1]).toEqual(expect.objectContaining({ name: "Output cost", data: [30] }));
+    expect(costOption.series[2]).toEqual(expect.objectContaining({ name: "Cache cost", data: [20] }));
 
   });
 
-  test("calculates tool share from tokens instead of cost", () => {
+  test("calculates tool percentages from tokens instead of cost", () => {
     const points = [
       {
         day: "2026-07-15",
@@ -266,7 +265,7 @@ describe("createTrendChartOption", () => {
     );
   });
 
-  test("calculates daily project shares and fills missing project days with zero", () => {
+  test("calculates daily project percentages and fills missing project days with zero", () => {
     const projectRatios = {
       daily: [
         {
@@ -305,7 +304,7 @@ describe("createTrendChartOption", () => {
     expect(projectRatios).toEqual(source);
   });
 
-  test("renders all-time project shares as a pie using raw token totals", () => {
+  test("renders all-time project percentages as a pie using raw token totals", () => {
     const projectRatios = {
       daily: [],
       total: [
@@ -340,19 +339,6 @@ describe("createTrendChartOption", () => {
 });
 
 describe("TrendPanel controls", () => {
-  test("uses share terminology in English ratio controls", () => {
-    expect(translations.en["Tool ratio"]).toBe("Tool share");
-    expect(translations.en["Project ratio"]).toBe("Project share");
-    expect(translations.en["Token ratio"]).toBe("Token share");
-    expect(translations.en["Cost ratio"]).toBe("Cost share");
-    expect(translations.en["Input ratio"]).toBe("Input share");
-    expect(translations.en["Output ratio"]).toBe("Output share");
-    expect(translations.en["Cache ratio"]).toBe("Cache share");
-    expect(translations.en["Input cost ratio"]).toBe("Input cost share");
-    expect(translations.en["Output cost ratio"]).toBe("Output cost share");
-    expect(translations.en["Cache cost ratio"]).toBe("Cache cost share");
-  });
-
   test("uses tool and project terminology in Chinese", () => {
     expect(translations.zh["Tool ratio"]).toBe("工具占比");
     expect(translations.zh["Project ratio"]).toBe("项目占比");
@@ -373,12 +359,12 @@ describe("TrendPanel controls", () => {
         language="en"
         meta="2026-07-01 to 2026-07-15 (UTC)"
         theme="light"
-        t={translateEn}
+        t={identity}
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Project share" }));
-    expect(screen.getByRole("heading", { name: "Project share" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Project" }));
+    expect(screen.getByRole("heading", { name: "Project" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Total" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "App ratio" })).toBeNull();
     expect(screen.getByText("2026-07-01 to 2026-07-15 (UTC)")).toBeTruthy();
@@ -386,7 +372,7 @@ describe("TrendPanel controls", () => {
     fireEvent.click(screen.getByRole("button", { name: "Total" }));
     expect(screen.queryByText("2026-07-01 to 2026-07-15 (UTC)")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Tool share" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tool" }));
     expect(screen.getByRole("button", { name: "Cumulative" })).toBeTruthy();
   });
 });

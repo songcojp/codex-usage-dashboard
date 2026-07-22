@@ -45,7 +45,7 @@ export function TrendPanel({
       <div className="chart-header-row">
         <div className="panel-header">
           <div>
-            <h2>{t(trendFilter === "project-ratio" ? "Project ratio" : "Usage trend")}</h2>
+            <h2>{t(trendFilter === "project-ratio" ? "Project" : "Usage trend")}</h2>
             {meta && !(trendFilter === "project-ratio" && trendMode === "cumulative") ? (
               <p>{meta}</p>
             ) : null}
@@ -84,12 +84,12 @@ export function TrendPanel({
                     : filter === "cost"
                     ? "Cost"
                     : filter === "tool-ratio"
-                    ? "Tool ratio"
+                    ? "Tool"
                     : filter === "project-ratio"
-                    ? "Project ratio"
+                    ? "Project"
                     : filter === "token-ratio"
-                    ? "Token ratio"
-                    : "Cost ratio"
+                    ? "Token"
+                    : "Cost"
                 )}
               </button>
             ))}
@@ -199,7 +199,7 @@ export function createTrendChartOption(
       },
       series: [
         {
-          name: t("Project ratio"),
+          name: t("Project"),
           type: "pie",
           radius: ["42%", "70%"],
           center: ["50%", "56%"],
@@ -261,9 +261,9 @@ export function createTrendChartOption(
       })
     };
     visibleSeries = [
-      makeSeries(t("Input ratio"), tokenRatioValues.input, colors[1]),
-      makeSeries(t("Output ratio"), tokenRatioValues.output, colors[2]),
-      makeSeries(t("Cache ratio"), tokenRatioValues.cache, colors[3])
+      makeSeries(t("Input"), tokenRatioValues.input, colors[1]),
+      makeSeries(t("Output"), tokenRatioValues.output, colors[2]),
+      makeSeries(t("Cache"), tokenRatioValues.cache, colors[3])
     ];
   } else if (trendFilter === "cost-ratio") {
     const costRatioValues = {
@@ -290,9 +290,9 @@ export function createTrendChartOption(
       })
     };
     visibleSeries = [
-      makeSeries(t("Input cost ratio"), costRatioValues.input, colors[1]),
-      makeSeries(t("Output cost ratio"), costRatioValues.output, colors[2]),
-      makeSeries(t("Cache cost ratio"), costRatioValues.cache, colors[3])
+      makeSeries(t("Input cost"), costRatioValues.input, colors[1]),
+      makeSeries(t("Output cost"), costRatioValues.output, colors[2]),
+      makeSeries(t("Cache cost"), costRatioValues.cache, colors[3])
     ];
   } else if (trendFilter === "tool-ratio") {
     const allTools = Array.from(
@@ -348,8 +348,8 @@ export function createTrendChartOption(
     visibleSeries = trendFilter === "cost" ? costSeries : trendFilter === "tokens" ? series.slice(0, 4) : series;
   }
 
-  const dailyTokenShareTooltipFormatter = trendMode === "daily" && (trendFilter === "tokens" || trendFilter === "all")
-    ? createDailyTokenShareTooltipFormatter(processedPoints, t, language)
+  const dailyTokenPercentageTooltipFormatter = trendMode === "daily" && (trendFilter === "tokens" || trendFilter === "all")
+    ? createDailyTokenPercentageTooltipFormatter(processedPoints, t, language)
     : undefined;
 
   return {
@@ -361,8 +361,8 @@ export function createTrendChartOption(
       backgroundColor: theme === "dark" ? "#0d213f" : "#ffffff",
       borderColor: axisLineColor,
       textStyle: { color: theme === "dark" ? "#f5f7fa" : "#0b1830" },
-      ...(dailyTokenShareTooltipFormatter
-        ? { formatter: dailyTokenShareTooltipFormatter }
+      ...(dailyTokenPercentageTooltipFormatter
+        ? { formatter: dailyTokenPercentageTooltipFormatter }
         : {
             valueFormatter: isRatio
               ? (value: number | string) => `${value}%`
@@ -442,7 +442,7 @@ type AxisTooltipParam = {
   value?: number | string;
 };
 
-function createDailyTokenShareTooltipFormatter(points: TrendPoint[], t: Translate, language: Language) {
+function createDailyTokenPercentageTooltipFormatter(points: TrendPoint[], t: Translate, language: Language) {
   const inputName = t("Input");
   const outputName = t("Output");
   const cacheName = t("Cache");
@@ -456,7 +456,7 @@ function createDailyTokenShareTooltipFormatter(points: TrendPoint[], t: Translat
     const tokenTotal = point
       ? point.inputTokens + point.outputTokens + point.cacheReadTokens + point.cacheWriteTokens
       : 0;
-    const shares: Record<string, number> = point && tokenTotal > 0
+    const percentages: Record<string, number> = point && tokenTotal > 0
       ? {
           [inputName]: point.inputTokens / tokenTotal,
           [outputName]: point.outputTokens / tokenTotal,
@@ -473,11 +473,11 @@ function createDailyTokenShareTooltipFormatter(points: TrendPoint[], t: Translat
       const formattedValue = seriesName === costName
         ? formatCostUsd(rawValue)
         : formatTokenValue(rawValue, language);
-      const share = tokenSeriesNames.has(seriesName) && shares[seriesName] !== undefined
-        ? ` (${formatPercent(shares[seriesName])})`
+      const percentage = tokenSeriesNames.has(seriesName) && percentages[seriesName] !== undefined
+        ? ` (${formatPercent(percentages[seriesName])})`
         : "";
 
-      rows.push(`${item.marker ?? ""}${escapeHtml(seriesName)}: ${escapeHtml(formattedValue)}${share}`);
+      rows.push(`${item.marker ?? ""}${escapeHtml(seriesName)}: ${escapeHtml(formattedValue)}${percentage}`);
     }
 
     return rows.join("<br/>");
