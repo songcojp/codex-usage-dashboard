@@ -67,6 +67,7 @@ export function TasksTable({
               <th>{t("Task")}</th>
               <th>{t("Started")}</th>
               <th>{t("Last activity")}</th>
+              <th className="numeric">{t("Duration (min)")}</th>
               <th>{t("Device")}</th>
               <th>{t("Project")}</th>
               <th className="numeric">{t("Events")}</th>
@@ -94,6 +95,7 @@ export function TasksTable({
                 </td>
                 <td>{formatDateTime(row.startedAt)}</td>
                 <td>{formatDateTime(row.lastActivityAt)}</td>
+                <td className="numeric">{formatDurationMinutes(row.startedAt, row.lastActivityAt)}</td>
                 <td>{groupLabel(row.deviceName, row.deviceCount, t)}</td>
                 <td>{groupLabel(row.projectName, row.projectCount, t)}</td>
                 <td className="numeric">{formatNumber(row.eventCount)}</td>
@@ -106,7 +108,7 @@ export function TasksTable({
             ))}
             {rows.length === 0 ? (
               <tr>
-                <td className="empty-cell" colSpan={11}>{t("No tasks in this range")}</td>
+                <td className="empty-cell" colSpan={12}>{t("No tasks in this range")}</td>
               </tr>
             ) : null}
           </tbody>
@@ -137,4 +139,11 @@ function formatDateTime(value: string): string {
   const hour = String(date.getUTCHours()).padStart(2, "0");
   const minute = String(date.getUTCMinutes()).padStart(2, "0");
   return `${year}-${month}-${day} ${hour}:${minute} UTC`;
+}
+
+function formatDurationMinutes(startedAt: string, lastActivityAt: string): string {
+  const started = Date.parse(startedAt);
+  const lastActivity = Date.parse(lastActivityAt);
+  if (!Number.isFinite(started) || !Number.isFinite(lastActivity)) return "-";
+  return formatNumber(Math.max(0, Math.round((lastActivity - started) / 60000)));
 }

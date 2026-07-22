@@ -132,6 +132,12 @@ describe("admin dashboard rendering", () => {
     expect(screen.getAllByText("Cost").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("$0.13").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("$0.1250")).toBeNull();
+    expect(screen.getByRole("tab", { name: "Tasks", selected: true })).toBeTruthy();
+    expect(screen.getByText("task-1")).toBeTruthy();
+    expect(screen.getByText("Duration (min)")).toBeTruthy();
+    expect(screen.getByText("60")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Events" }));
     expect(screen.getByText("2026-05-30 12:00 UTC")).toBeTruthy();
     expect(screen.queryByLabelText("Token metrics")?.textContent).not.toContain("Events");
     expect((screen.getByRole("button", { name: "Previous" }) as HTMLButtonElement).disabled).toBe(
@@ -140,7 +146,6 @@ describe("admin dashboard rendering", () => {
     expect((screen.getByRole("button", { name: "Next" }) as HTMLButtonElement).disabled).toBe(false);
 
     fireEvent.click(screen.getByRole("tab", { name: "Tasks" }));
-    expect(screen.getByText("task-1")).toBeTruthy();
     expect(screen.getByText("2026-05-30 11:00 UTC")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Sort"), {
       target: { value: "eventCount-desc" }

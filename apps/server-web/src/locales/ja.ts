@@ -47,6 +47,7 @@ const ja: Record<string, string> = {
   Task: "タスク",
   Started: "開始日時",
   "Last activity": "最終アクティビティ",
+  "Duration (min)": "所要時間（分）",
   "Last activity newest first": "最終アクティビティの新しい順",
   "Last activity oldest first": "最終アクティビティの古い順",
   "Task pagination": "タスクのページ送り",

@@ -101,7 +101,7 @@ export function App() {
   const [utcNow, setUtcNow] = useState(() => new Date());
   const [filters, setFilters] = useState<UsageFilters>(() => defaultFilters());
   const [data, setData] = useState<DashboardData | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>("events");
+  const [activeTab, setActiveTab] = useState<Tab>("tasks");
   const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
   const [eventOffset, setEventOffset] = useState(0);
   const [eventSort, setEventSort] = useState<EventSort>("occurredAt-desc");

@@ -47,6 +47,7 @@ const zh: Record<string, string> = {
   Task: "任务",
   Started: "开始时间",
   "Last activity": "最后活动时间",
+  "Duration (min)": "时长（分钟）",
   "Last activity newest first": "最后活动时间从新到旧",
   "Last activity oldest first": "最后活动时间从旧到新",
   "Task pagination": "任务分页",

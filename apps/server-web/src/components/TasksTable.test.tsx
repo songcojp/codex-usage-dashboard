@@ -50,6 +50,8 @@ describe("TasksTable", () => {
     const fallbackId = screen.getByText("fallback:device-a");
     expect(fallbackId).toBeTruthy();
     expect(fallbackId.closest("td")?.getAttribute("title")).toBe("fallback:device-a");
+    expect(screen.getByText("Duration (min)")).toBeTruthy();
+    expect(screen.getByText("60")).toBeTruthy();
     expect(screen.getByText("Multiple (2)")).toBeTruthy();
     expect(screen.getByText("Project A")).toBeTruthy();
     expect(screen.getByText("16")).toBeTruthy();

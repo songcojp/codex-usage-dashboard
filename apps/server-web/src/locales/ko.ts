@@ -47,6 +47,7 @@ const ko: Record<string, string> = {
   Task: "작업",
   Started: "시작 시간",
   "Last activity": "마지막 활동",
+  "Duration (min)": "소요 시간(분)",
   "Last activity newest first": "마지막 활동 최신순",
   "Last activity oldest first": "마지막 활동 오래된순",
   "Task pagination": "작업 페이지 이동",
