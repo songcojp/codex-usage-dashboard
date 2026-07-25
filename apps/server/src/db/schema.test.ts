@@ -32,6 +32,13 @@ const gpt55PriceMigrationUrl = new URL("./migrations/0006_seed_gpt_5_5_price.sql
 const gpt55PriceMigrationSql = existsSync(gpt55PriceMigrationUrl)
   ? readFileSync(gpt55PriceMigrationUrl, "utf8")
   : "";
+const qwen38MaxPreviewPriceMigrationUrl = new URL(
+  "./migrations/0007_seed_qwen_3_8_max_preview_price.sql",
+  import.meta.url
+);
+const qwen38MaxPreviewPriceMigrationSql = existsSync(qwen38MaxPreviewPriceMigrationUrl)
+  ? readFileSync(qwen38MaxPreviewPriceMigrationUrl, "utf8")
+  : "";
 
 describe("database schema", () => {
   it("maps event, project identity, and model-price columns", () => {
@@ -81,7 +88,8 @@ describe("public database baseline", () => {
       "0003_usage_event_task_ids.sql",
       "0004_task_metadata.sql",
       "0005_usage_event_cleanup_backups.sql",
-      "0006_seed_gpt_5_5_price.sql"
+      "0006_seed_gpt_5_5_price.sql",
+      "0007_seed_qwen_3_8_max_preview_price.sql"
     ]);
     for (const table of ["usage_events", "daily_usage_rollups"]) {
       expect(bigintMigrationSql).toContain(`ALTER TABLE "${table}"`);
@@ -110,6 +118,36 @@ describe("public database baseline", () => {
   it("adds the missing GPT-5.5 price without overwriting an admin override", () => {
     expect(gpt55PriceMigrationSql).toContain("('gpt-5.5', 5.00, 30.00, 0.50, 6.25)");
     expect(gpt55PriceMigrationSql).toContain('ON CONFLICT ("model") DO NOTHING');
+  });
+
+  it("adds the Qwen3.8 Max Preview price without overwriting an admin override", () => {
+    expect(qwen38MaxPreviewPriceMigrationSql).toContain(
+      "('qwen3.8-max-preview', 0.0886, 0.2658, 0.0089, 0.1107)"
+    );
+    expect(qwen38MaxPreviewPriceMigrationSql).toContain('ON CONFLICT ("model") DO NOTHING');
+  });
+
+  it("repairs historical Qwen3.8 Max Preview event costs and rebuilds its rollups", () => {
+    expect(qwen38MaxPreviewPriceMigrationSql).toContain('UPDATE "usage_events" AS "event"');
+    expect(qwen38MaxPreviewPriceMigrationSql).toContain(
+      `"event"."model" = 'qwen3.8-max-preview'`
+    );
+    expect(qwen38MaxPreviewPriceMigrationSql).toContain('DELETE FROM "daily_usage_rollups"');
+    expect(qwen38MaxPreviewPriceMigrationSql).toContain(
+      `"daily_usage_rollups"."model" = 'qwen3.8-max-preview'`
+    );
+    expect(qwen38MaxPreviewPriceMigrationSql).toContain(
+      'INSERT INTO "daily_usage_rollups"'
+    );
+    expect(qwen38MaxPreviewPriceMigrationSql).toContain(
+      'FROM "usage_events" AS "event"'
+    );
+    expect(qwen38MaxPreviewPriceMigrationSql).toContain(
+      `WHERE "event"."model" = 'qwen3.8-max-preview'`
+    );
+    expect(qwen38MaxPreviewPriceMigrationSql).toContain(
+      'sum(coalesce("event"."cost_usd", 0))'
+    );
   });
 
   it("creates every business table and required index", () => {
