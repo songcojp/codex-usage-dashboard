@@ -126,7 +126,7 @@ const ko: Record<string, string> = {
   Total: "총합",
   All: "전체",
   Tokens: "토큰",
-  "Tool ratio": "도구 비율",
+  "Tools ratio": "도구 비율",
   "Project ratio": "프로젝트 비율",
   "Token ratio": "토큰 유형 비율",
   "Cost ratio": "비용 비율",

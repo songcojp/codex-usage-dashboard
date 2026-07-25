@@ -126,7 +126,7 @@ const ja: Record<string, string> = {
   Total: "総量",
   All: "すべて",
   Tokens: "トークン",
-  "Tool ratio": "ツール割合",
+  "Tools ratio": "ツール割合",
   "Project ratio": "プロジェクト割合",
   "Token ratio": "トークンタイプ割合",
   "Cost ratio": "費用割合",

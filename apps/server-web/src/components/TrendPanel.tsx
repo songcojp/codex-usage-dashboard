@@ -45,7 +45,7 @@ export function TrendPanel({
       <div className="chart-header-row">
         <div className="panel-header">
           <div>
-            <h2>{t(trendFilter === "project-ratio" ? "Project" : "Usage trend")}</h2>
+            <h2>{t(trendFilter === "project-ratio" ? "Project ratio" : "Usage trend")}</h2>
             {meta && !(trendFilter === "project-ratio" && trendMode === "cumulative") ? (
               <p>{meta}</p>
             ) : null}
@@ -84,12 +84,12 @@ export function TrendPanel({
                     : filter === "cost"
                     ? "Cost"
                     : filter === "tool-ratio"
-                    ? "Tool"
+                    ? "Tools ratio"
                     : filter === "project-ratio"
-                    ? "Project"
+                    ? "Project ratio"
                     : filter === "token-ratio"
-                    ? "Token"
-                    : "Cost"
+                    ? "Token ratio"
+                    : "Cost ratio"
                 )}
               </button>
             ))}
@@ -199,7 +199,7 @@ export function createTrendChartOption(
       },
       series: [
         {
-          name: t("Project"),
+          name: t("Project ratio"),
           type: "pie",
           radius: ["42%", "70%"],
           center: ["50%", "56%"],
@@ -261,9 +261,9 @@ export function createTrendChartOption(
       })
     };
     visibleSeries = [
-      makeSeries(t("Input"), tokenRatioValues.input, colors[1]),
-      makeSeries(t("Output"), tokenRatioValues.output, colors[2]),
-      makeSeries(t("Cache"), tokenRatioValues.cache, colors[3])
+      makeSeries(t("Input ratio"), tokenRatioValues.input, colors[1]),
+      makeSeries(t("Output ratio"), tokenRatioValues.output, colors[2]),
+      makeSeries(t("Cache ratio"), tokenRatioValues.cache, colors[3])
     ];
   } else if (trendFilter === "cost-ratio") {
     const costRatioValues = {
@@ -290,9 +290,9 @@ export function createTrendChartOption(
       })
     };
     visibleSeries = [
-      makeSeries(t("Input cost"), costRatioValues.input, colors[1]),
-      makeSeries(t("Output cost"), costRatioValues.output, colors[2]),
-      makeSeries(t("Cache cost"), costRatioValues.cache, colors[3])
+      makeSeries(t("Input cost ratio"), costRatioValues.input, colors[1]),
+      makeSeries(t("Output cost ratio"), costRatioValues.output, colors[2]),
+      makeSeries(t("Cache cost ratio"), costRatioValues.cache, colors[3])
     ];
   } else if (trendFilter === "tool-ratio") {
     const allTools = Array.from(
