@@ -109,7 +109,7 @@ describe("Codex parser adapters", () => {
     ]);
   });
 
-  it("classifies CLI, VS Code, and Desktop as independent event types", async () => {
+  it("classifies CLI, Multica, VS Code, and Desktop as independent event types", async () => {
     const cli = await parseCodexFile(
       await writeFixture("cli.jsonl", currentSession({ source: "cli", originator: "codex-tui" }))
     );
@@ -117,6 +117,12 @@ describe("Codex parser adapters", () => {
       await writeFixture(
         "vscode.jsonl",
         currentSession({ source: "vscode", originator: "codex_vscode" })
+      )
+    );
+    const multica = await parseCodexFile(
+      await writeFixture(
+        "multica.jsonl",
+        currentSession({ source: "vscode", originator: "multica-agent-sdk" })
       )
     );
     const desktop = await parseCodexFile(
@@ -127,6 +133,7 @@ describe("Codex parser adapters", () => {
     );
 
     expect(cli).toMatchObject([{ toolSlug: "codex-cli" }]);
+    expect(multica).toMatchObject([{ toolSlug: "codex-cli" }]);
     expect(vscode).toMatchObject([{ toolSlug: "codex-vscode-plugin" }]);
     expect(desktop).toMatchObject([{ toolSlug: "codex-desktop" }]);
     expect(desktop[0]?.toolSlug).not.toBe("codex-vscode-plugin");

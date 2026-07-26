@@ -3,6 +3,7 @@ import { initialCodexContext, parseCodexFile, parseCodexLine, type CodexParserCo
 import type { IncrementalParserAdapter } from "./types.js";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { discoverMulticaCodexSessionFiles, isMulticaWorkspaceRoot } from "../multica.js";
 
 export { parseCodexVsCodeFile, parseCodexVsCodeLine } from "./codex-vscode.js";
 export { initialCodexContext, parseCodexFile, parseCodexLine } from "./codex.js";
@@ -22,6 +23,9 @@ export const parserAdapters: Array<
 ];
 
 async function discoverCodexSessionFiles(sourcePath: string): Promise<string[]> {
+  if (isMulticaWorkspaceRoot(sourcePath)) {
+    return discoverMulticaCodexSessionFiles(sourcePath);
+  }
   return discoverFiles(sourcePath, (filePath) => filePath.endsWith(".jsonl"));
 }
 

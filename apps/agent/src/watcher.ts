@@ -14,6 +14,7 @@ import { readAgentState, writeAgentState, type FileCursorState } from "./state.j
 import { discoverTaskDatabasePaths } from "./task-metadata-database.js";
 import { discoverTaskIndexPaths } from "./task-metadata-index.js";
 import { syncTaskMetadata, type TaskMetadataSyncResult } from "./task-metadata-sync.js";
+import { discoverMulticaWatchRoots, isMulticaWorkspaceRoot } from "./multica.js";
 
 export type WatcherCycleReason = "startup" | "filesystem" | "reconciliation" | "retry";
 
@@ -82,6 +83,7 @@ export async function runWatcher(input: {
   reconciliationMs?: number;
   taskMetadataEnv?: NodeJS.ProcessEnv;
   taskMetadataHomeDir?: string;
+  fallbackPollMs?: number;
   signal?: AbortSignal;
   onCycle?: (result: WatcherCycleResult) => void;
   onError?: (category: string) => void;
@@ -92,6 +94,7 @@ export async function runWatcher(input: {
   let debounceTimer: NodeJS.Timeout | null = null;
   let retryTimer: NodeJS.Timeout | null = null;
   let reconciliationTimer: NodeJS.Timeout | null = null;
+  let fallbackPollTimer: NodeJS.Timeout | null = null;
   let nextRetryAt: string | null = null;
 
   const scheduleRetry = (delayMs: number) => {
@@ -111,20 +114,35 @@ export async function runWatcher(input: {
       env: input.taskMetadataEnv,
       homeDir: input.taskMetadataHomeDir
     });
+    let needsFallbackPolling = false;
     for (const root of roots) {
       if (watchers.has(root)) continue;
-      watchers.set(root, fs.watch(root, () => {
-        if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(
-          () => void scheduler.trigger("filesystem").catch(reportError),
-          input.debounceMs ?? 2000
-        );
-      }));
+      try {
+        watchers.set(root, fs.watch(root, () => {
+          if (debounceTimer) clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(
+            () => void scheduler.trigger("filesystem").catch(reportError),
+            input.debounceMs ?? 2000
+          );
+        }));
+      } catch (error) {
+        if (!isWatchUnavailable(error)) throw error;
+        needsFallbackPolling = true;
+      }
     }
     for (const [root, watcher] of watchers) {
       if (roots.includes(root)) continue;
       watcher.close();
       watchers.delete(root);
+    }
+    if (needsFallbackPolling && !fallbackPollTimer) {
+      fallbackPollTimer = setInterval(
+        () => void scheduler.trigger("filesystem").catch(reportError),
+        input.fallbackPollMs ?? 60_000
+      );
+    } else if (!needsFallbackPolling && fallbackPollTimer) {
+      clearInterval(fallbackPollTimer);
+      fallbackPollTimer = null;
     }
   };
   const scheduler = new SerializedCycleScheduler(async (reason) => {
@@ -176,6 +194,7 @@ export async function runWatcher(input: {
     if (debounceTimer) clearTimeout(debounceTimer);
     if (retryTimer) clearTimeout(retryTimer);
     if (reconciliationTimer) clearInterval(reconciliationTimer);
+    if (fallbackPollTimer) clearInterval(fallbackPollTimer);
     for (const watcher of watchers.values()) watcher.close();
     try {
       await scheduler.stopAndWait();
@@ -436,6 +455,11 @@ function isMissing(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === "ENOENT");
 }
 
+function isWatchUnavailable(error: unknown): boolean {
+  if (!error || typeof error !== "object" || !("code" in error)) return false;
+  return ["EACCES", "EISDIR", "EINVAL", "ENOSPC", "ENOSYS", "EPERM"].includes(String(error.code));
+}
+
 function errorCategory(error: unknown): string {
   return error && typeof error === "object" && "code" in error && typeof error.code === "string"
     ? `io-${error.code.toLowerCase()}`
@@ -497,6 +521,9 @@ function emptyTaskMetadataSync(): TaskMetadataSyncResult {
 }
 
 async function existingWatchRoots(sourcePath: string): Promise<string[]> {
+  if (isMulticaWorkspaceRoot(sourcePath)) {
+    return discoverMulticaWatchRoots(sourcePath);
+  }
   try {
     const stat = await fsp.stat(sourcePath);
     if (stat.isDirectory()) {
