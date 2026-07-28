@@ -139,7 +139,7 @@ describe("admin dashboard rendering", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Events" }));
     expect(screen.getByText("2026-05-30 12:00 UTC")).toBeTruthy();
-    expect(screen.getByText("$0.0050")).toBeTruthy();
+    expect(screen.getByText("$0.1250")).toBeTruthy();
     expect(screen.queryByText("$0.00")).toBeNull();
     expect(screen.queryByLabelText("Token metrics")?.textContent).not.toContain("Events");
     expect((screen.getByRole("button", { name: "Previous" }) as HTMLButtonElement).disabled).toBe(
@@ -371,6 +371,9 @@ function handleRequest(input: RequestInfo | URL) {
   if (path.startsWith("/api/admin/project-ratios")) {
     return response({ daily: [], total: [] });
   }
+  if (path.startsWith("/api/admin/model-ratios")) {
+    return response({ daily: [], total: [] });
+  }
   if (path.startsWith("/api/admin/events")) {
     return response({
       total: 60,
@@ -386,7 +389,7 @@ function handleRequest(input: RequestInfo | URL) {
           outputTokens: 7,
           cacheReadTokens: 6,
           cacheWriteTokens: 5,
-          costUsd: 0.0049985,
+          costUsd: 0.125,
           totalTokens: 26
         }
       ]

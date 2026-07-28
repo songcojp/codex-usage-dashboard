@@ -126,6 +126,7 @@ const ja: Record<string, string> = {
   Total: "総量",
   All: "すべて",
   Tokens: "トークン",
+  "Model usage": "モデル使用量",
   "Tools ratio": "ツール割合",
   "Project ratio": "プロジェクト割合",
   "Token ratio": "トークンタイプ割合",
@@ -140,6 +141,7 @@ const ja: Record<string, string> = {
   "Output cost ratio": "出力費用割合",
   "Cache cost ratio": "キャッシュ費用割合",
   "No tools": "ツールデータなし",
+  "No model usage": "モデル使用量データなし",
   "No project usage": "プロジェクト使用量データなし"
 };
 

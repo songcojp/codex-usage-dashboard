@@ -34,6 +34,9 @@ function createQueryService(): AdminQueryService {
     async getProjectRatios() {
       return { daily: [], total: [] };
     },
+    async getModelRatios() {
+      return { daily: [], total: [] };
+    },
     async getEvents() {
       return { rows: [], total: 0 };
     },

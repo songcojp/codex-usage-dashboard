@@ -39,6 +39,19 @@ export type ProjectRatioResponse = {
   total: ProjectRatioItem[];
 };
 
+export type ModelRatioItem = {
+  model: string;
+  totalTokens: number;
+};
+
+export type ModelRatioResponse = {
+  daily: Array<{
+    day: string;
+    models: ModelRatioItem[];
+  }>;
+  total: ModelRatioItem[];
+};
+
 export type UsageEvent = UsageSummary & {
   id: string;
   occurredAt: string;
@@ -144,6 +157,7 @@ export type DashboardData = {
   summary: UsageSummary;
   trends: { points: TrendPoint[] };
   projectRatios: ProjectRatioResponse;
+  modelRatios: ModelRatioResponse;
   events: { rows: UsageEvent[]; total: number };
   tasks: { rows: TaskUsage[]; total: number };
   devices: { rows: Device[] };
@@ -260,11 +274,13 @@ export async function getDashboardData(
   const deviceOptionsQuery = toQueryString(withoutKeys(filters, ["deviceId"]));
   const projectOptionsQuery = toQueryString(withoutKeys(filters, ["projectId"]));
   const projectRatioQuery = toQueryString(withoutKeys(filters, ["projectId"]));
+  const modelRatioQuery = toQueryString(withoutKeys(filters, ["model"]));
   const modelQuery = toQueryString(withoutKeys(filters, ["model"]));
   const [
     summary,
     trends,
     projectRatios,
+    modelRatios,
     events,
     tasks,
     devices,
@@ -278,6 +294,7 @@ export async function getDashboardData(
       apiGet<UsageSummary>(`/api/admin/summary${query}`),
       apiGet<{ points: TrendPoint[] }>(`/api/admin/trends${query}`),
       apiGet<ProjectRatioResponse>(`/api/admin/project-ratios${projectRatioQuery}`),
+      apiGet<ModelRatioResponse>(`/api/admin/model-ratios${modelRatioQuery}`),
       apiGet<{ rows: UsageEvent[]; total: number }>(`/api/admin/events${eventQuery}`),
       apiGet<{ rows: TaskUsage[]; total: number }>(`/api/admin/tasks${taskQuery}`),
       apiGet<{ rows: Device[] }>(`/api/admin/devices${query}`),
@@ -293,6 +310,7 @@ export async function getDashboardData(
     summary,
     trends,
     projectRatios,
+    modelRatios,
     events,
     tasks,
     devices,

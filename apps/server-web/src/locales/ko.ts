@@ -126,6 +126,7 @@ const ko: Record<string, string> = {
   Total: "총합",
   All: "전체",
   Tokens: "토큰",
+  "Model usage": "모델 사용량",
   "Tools ratio": "도구 비율",
   "Project ratio": "프로젝트 비율",
   "Token ratio": "토큰 유형 비율",
@@ -140,6 +141,7 @@ const ko: Record<string, string> = {
   "Output cost ratio": "출력 비용 비율",
   "Cache cost ratio": "캐시 비용 비율",
   "No tools": "도구 데이터 없음",
+  "No model usage": "모델 사용량 데이터 없음",
   "No project usage": "프로젝트 사용량 데이터 없음"
 };
 

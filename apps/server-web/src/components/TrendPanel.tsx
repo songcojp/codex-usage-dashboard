@@ -3,7 +3,7 @@ import { GridComponent, LegendComponent, TooltipComponent } from "echarts/compon
 import { type ECharts, init, use } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ProjectRatioResponse, TrendPoint } from "../api.js";
+import type { ModelRatioResponse, ProjectRatioResponse, TrendPoint } from "../api.js";
 import type { Language, Theme, Translate } from "../dashboard-types.js";
 
 use([GridComponent, LegendComponent, LineChart, PieChart, TooltipComponent, CanvasRenderer]);
@@ -13,6 +13,7 @@ type TrendFilter =
   | "all"
   | "tokens"
   | "cost"
+  | "model"
   | "tool-ratio"
   | "project-ratio"
   | "token-ratio"
@@ -21,6 +22,7 @@ type TrendFilter =
 type TrendPanelProps = {
   points: TrendPoint[];
   projectRatios: ProjectRatioResponse;
+  modelRatios?: ModelRatioResponse;
   initialLoading: boolean;
   language: Language;
   theme: Theme;
@@ -31,6 +33,7 @@ type TrendPanelProps = {
 export function TrendPanel({
   points,
   projectRatios,
+  modelRatios = { daily: [], total: [] },
   initialLoading,
   language,
   theme,
@@ -45,8 +48,8 @@ export function TrendPanel({
       <div className="chart-header-row">
         <div className="panel-header">
           <div>
-            <h2>{t(trendFilter === "project-ratio" ? "Project ratio" : "Usage trend")}</h2>
-            {meta && !(trendFilter === "project-ratio" && trendMode === "cumulative") ? (
+            <h2>{t(trendFilter === "project-ratio" ? "Project ratio" : trendFilter === "model" ? "Model usage" : "Usage trend")}</h2>
+            {meta && !((trendFilter === "project-ratio" || trendFilter === "model") && trendMode === "cumulative") ? (
               <p>{meta}</p>
             ) : null}
           </div>
@@ -65,11 +68,11 @@ export function TrendPanel({
               onClick={() => setTrendMode("cumulative")}
               type="button"
             >
-              {t(trendFilter === "project-ratio" ? "Total" : "Cumulative")}
+              {t(trendFilter === "project-ratio" || trendFilter === "model" ? "Total" : "Cumulative")}
             </button>
           </div>
           <div className="toggle-group" role="group" aria-label="Trend Filter">
-            {(["all", "tokens", "cost", "tool-ratio", "project-ratio", "token-ratio", "cost-ratio"] as const).map((filter) => (
+            {(["all", "tokens", "cost", "model", "tool-ratio", "project-ratio", "token-ratio", "cost-ratio"] as const).map((filter) => (
               <button
                 className={trendFilter === filter ? "toggle-btn active" : "toggle-btn"}
                 key={filter}
@@ -83,6 +86,8 @@ export function TrendPanel({
                     ? "Tokens"
                     : filter === "cost"
                     ? "Cost"
+                    : filter === "model"
+                    ? "Model"
                     : filter === "tool-ratio"
                     ? "Tools ratio"
                     : filter === "project-ratio"
@@ -99,6 +104,7 @@ export function TrendPanel({
       <TrendChart
         initialLoading={initialLoading}
         language={language}
+        modelRatios={modelRatios}
         points={points}
         projectRatios={projectRatios}
         t={t}
@@ -117,7 +123,8 @@ export function createTrendChartOption(
   theme: Theme = "light",
   trendMode: TrendMode = "daily",
   trendFilter: TrendFilter = "all",
-  projectRatios: ProjectRatioResponse = { daily: [], total: [] }
+  projectRatios: ProjectRatioResponse = { daily: [], total: [] },
+  modelRatios: ModelRatioResponse = { daily: [], total: [] }
 ): any {
   let processedPoints = [...points];
   if (trendMode === "cumulative") {
@@ -179,6 +186,48 @@ export function createTrendChartOption(
   const splitLineColor = theme === "dark" ? "#243754" : "#e8edf3";
   const axisLineColor = theme === "dark" ? "#354965" : "#d9e1eb";
 
+  if (trendFilter === "model" && trendMode === "cumulative") {
+    return {
+      backgroundColor: theme === "dark" ? "#0d1b2e" : "#ffffff",
+      color: colors,
+      tooltip: {
+        trigger: "item",
+        formatter: (params: PieTooltipParam) => {
+          const count = formatTokenValue(params.value ?? 0, language);
+          const percentage = Number(params.percent ?? 0).toFixed(1);
+          return `${params.marker ?? ""}${escapeHtml(params.name ?? "")}: ${escapeHtml(count)} Token (${percentage}%)`;
+        },
+        backgroundColor: theme === "dark" ? "#0d213f" : "#ffffff",
+        borderColor: axisLineColor,
+        textStyle: { color: theme === "dark" ? "#f5f7fa" : "#0b1830" }
+      },
+      legend: {
+        type: "scroll",
+        top: 0,
+        left: 0,
+        right: 0,
+        textStyle: { color: textColor }
+      },
+      series: [
+        {
+          name: t("Model usage"),
+          type: "pie",
+          radius: ["42%", "70%"],
+          center: ["50%", "56%"],
+          avoidLabelOverlap: true,
+          itemStyle: {
+            borderColor: theme === "dark" ? "#0d1b2e" : "#ffffff",
+            borderWidth: 2
+          },
+          label: { color: textColor, formatter: "{b}\n{d}%" },
+          data: modelRatios.total
+            .filter((item) => item.totalTokens > 0)
+            .map((item) => ({ name: item.model, value: item.totalTokens }))
+        }
+      ]
+    };
+  }
+
   if (trendFilter === "project-ratio" && trendMode === "cumulative") {
     return {
       backgroundColor: theme === "dark" ? "#0d1b2e" : "#ffffff",
@@ -221,7 +270,22 @@ export function createTrendChartOption(
   const isRatio = trendFilter.endsWith("-ratio");
   let axisDays = processedPoints.map((point) => point.day);
 
-  if (trendFilter === "project-ratio") {
+  if (trendFilter === "model") {
+    axisDays = modelRatios.daily.map((point) => point.day);
+    const modelNames = Array.from(
+      new Set(modelRatios.daily.flatMap((point) => point.models.map((item) => item.model)))
+    ).sort((left, right) => left.localeCompare(right));
+
+    visibleSeries = modelNames.map((model, index) =>
+      makeSeries(
+        model,
+        modelRatios.daily.map(
+          (point) => point.models.find((item) => item.model === model)?.totalTokens ?? 0
+        ),
+        colors[index % colors.length]
+      )
+    );
+  } else if (trendFilter === "project-ratio") {
     axisDays = projectRatios.daily.map((point) => point.day);
     const projectNames = new Map<string, string>();
     for (const point of projectRatios.daily) {
@@ -351,6 +415,9 @@ export function createTrendChartOption(
   const dailyTokenPercentageTooltipFormatter = trendMode === "daily" && (trendFilter === "tokens" || trendFilter === "all")
     ? createDailyTokenPercentageTooltipFormatter(processedPoints, t, language)
     : undefined;
+  const dailyModelPercentageTooltipFormatter = trendMode === "daily" && trendFilter === "model"
+    ? createDailyModelPercentageTooltipFormatter(modelRatios, language)
+    : undefined;
 
   return {
     backgroundColor: theme === "dark" ? "#0d1b2e" : "#ffffff",
@@ -361,8 +428,8 @@ export function createTrendChartOption(
       backgroundColor: theme === "dark" ? "#0d213f" : "#ffffff",
       borderColor: axisLineColor,
       textStyle: { color: theme === "dark" ? "#f5f7fa" : "#0b1830" },
-      ...(dailyTokenPercentageTooltipFormatter
-        ? { formatter: dailyTokenPercentageTooltipFormatter }
+      ...(dailyModelPercentageTooltipFormatter || dailyTokenPercentageTooltipFormatter
+        ? { formatter: dailyModelPercentageTooltipFormatter ?? dailyTokenPercentageTooltipFormatter }
         : {
             valueFormatter: isRatio
               ? (value: number | string) => `${value}%`
@@ -442,6 +509,37 @@ type AxisTooltipParam = {
   value?: number | string;
 };
 
+type PieTooltipParam = {
+  marker?: string;
+  name?: string;
+  percent?: number;
+  value?: number | string;
+};
+
+function createDailyModelPercentageTooltipFormatter(
+  modelRatios: ModelRatioResponse,
+  language: Language
+) {
+  return (params: AxisTooltipParam | AxisTooltipParam[]) => {
+    const items = Array.isArray(params) ? params : [params];
+    const dataIndex = Number(items[0]?.dataIndex ?? 0);
+    const day = modelRatios.daily[dataIndex];
+    const totalTokens = day?.models.reduce((sum, item) => sum + item.totalTokens, 0) ?? 0;
+    const title = items[0]?.axisValueLabel ?? items[0]?.name ?? (day ? formatUtcDateLabel(day.day) : "");
+    const rows = [`<strong>${escapeHtml(String(title))}</strong>`];
+
+    for (const item of items) {
+      const rawValue = Number(item.value ?? item.data ?? 0);
+      const percentage = totalTokens > 0 ? rawValue / totalTokens : 0;
+      rows.push(
+        `${item.marker ?? ""}${escapeHtml(item.seriesName ?? "")}: ${escapeHtml(formatTokenValue(rawValue, language))} Token (${formatPercent(percentage)})`
+      );
+    }
+
+    return rows.join("<br/>");
+  };
+}
+
 function createDailyTokenPercentageTooltipFormatter(points: TrendPoint[], t: Translate, language: Language) {
   const inputName = t("Input");
   const outputName = t("Output");
@@ -505,6 +603,7 @@ function escapeHtml(value: string): string {
 function TrendChart({
   points,
   projectRatios,
+  modelRatios,
   initialLoading,
   language,
   t,
@@ -514,6 +613,7 @@ function TrendChart({
 }: {
   points: TrendPoint[];
   projectRatios: ProjectRatioResponse;
+  modelRatios: ModelRatioResponse;
   initialLoading: boolean;
   language: Language;
   t: Translate;
@@ -522,14 +622,18 @@ function TrendChart({
   trendFilter: TrendFilter;
 }) {
   const chartElement = useRef<HTMLDivElement | null>(null);
-  const hasData = trendFilter === "project-ratio"
+  const hasData = trendFilter === "model"
+    ? trendMode === "daily"
+      ? modelRatios.daily.some((point) => point.models.some((item) => item.totalTokens > 0))
+      : modelRatios.total.some((item) => item.totalTokens > 0)
+    : trendFilter === "project-ratio"
     ? trendMode === "daily"
       ? projectRatios.daily.length > 0
       : projectRatios.total.length > 0
     : points.length > 0;
   const chartOption = useMemo(
-    () => createTrendChartOption(points, t, language, theme, trendMode, trendFilter, projectRatios),
-    [language, points, projectRatios, t, theme, trendMode, trendFilter]
+    () => createTrendChartOption(points, t, language, theme, trendMode, trendFilter, projectRatios, modelRatios),
+    [language, modelRatios, points, projectRatios, t, theme, trendMode, trendFilter]
   );
 
   useEffect(() => {
@@ -549,7 +653,13 @@ function TrendChart({
   if (!hasData) {
     return (
       <div className="chart-empty">
-        {t(trendFilter === "project-ratio" ? "No project usage" : "No trend data for this range.")}
+        {t(
+          trendFilter === "project-ratio"
+            ? "No project usage"
+            : trendFilter === "model"
+            ? "No model usage"
+            : "No trend data for this range."
+        )}
       </div>
     );
   }

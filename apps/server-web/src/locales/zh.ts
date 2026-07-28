@@ -126,6 +126,7 @@ const zh: Record<string, string> = {
   Total: "总量",
   All: "全部显示",
   Tokens: "仅显 Token",
+  "Model usage": "模型用量",
   "Tools ratio": "工具占比",
   "Project ratio": "项目占比",
   "Token ratio": "Token 类型占比",
@@ -140,6 +141,7 @@ const zh: Record<string, string> = {
   "Output cost ratio": "输出费用占比",
   "Cache cost ratio": "缓存费用占比",
   "No tools": "无工具数据",
+  "No model usage": "无模型用量数据",
   "No project usage": "无项目用量数据"
 };
 
