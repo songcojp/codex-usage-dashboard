@@ -1006,7 +1006,7 @@ function EventsTable({
                 <td className="numeric">{formatNumber(row.outputTokens)}</td>
                 <td className="numeric">{formatNumber(row.cacheReadTokens + row.cacheWriteTokens)}</td>
                 <td className="numeric strong">{formatNumber(row.totalTokens)}</td>
-                <td className="numeric strong">{formatCurrency(row.costUsd)}</td>
+                <td className="numeric strong">{formatEventCurrency(row.costUsd)}</td>
               </tr>
             ))}
             {rows.length === 0 ? <EmptyRow columns={8} label={t("No usage events in this range")} /> : null}
@@ -1402,6 +1402,14 @@ function formatMetricNumber(value: number): string {
 
 function formatCurrency(value: number): string {
   return `$${value.toFixed(2)}`;
+}
+
+function formatEventCurrency(value: number): string {
+  if (value !== 0 && Math.abs(value) < 0.01) {
+    return `$${value.toFixed(4)}`;
+  }
+
+  return formatCurrency(value);
 }
 
 function formatMetricCurrency(value: number): string {

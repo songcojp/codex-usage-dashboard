@@ -139,6 +139,8 @@ describe("admin dashboard rendering", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Events" }));
     expect(screen.getByText("2026-05-30 12:00 UTC")).toBeTruthy();
+    expect(screen.getByText("$0.0050")).toBeTruthy();
+    expect(screen.queryByText("$0.00")).toBeNull();
     expect(screen.queryByLabelText("Token metrics")?.textContent).not.toContain("Events");
     expect((screen.getByRole("button", { name: "Previous" }) as HTMLButtonElement).disabled).toBe(
       true
@@ -384,7 +386,7 @@ function handleRequest(input: RequestInfo | URL) {
           outputTokens: 7,
           cacheReadTokens: 6,
           cacheWriteTokens: 5,
-          costUsd: 0.125,
+          costUsd: 0.0049985,
           totalTokens: 26
         }
       ]
