@@ -39,6 +39,13 @@ const qwen38MaxPreviewPriceMigrationUrl = new URL(
 const qwen38MaxPreviewPriceMigrationSql = existsSync(qwen38MaxPreviewPriceMigrationUrl)
   ? readFileSync(qwen38MaxPreviewPriceMigrationUrl, "utf8")
   : "";
+const qwen37MaxPriceMigrationUrl = new URL(
+  "./migrations/0008_seed_qwen_3_7_max_price.sql",
+  import.meta.url
+);
+const qwen37MaxPriceMigrationSql = existsSync(qwen37MaxPriceMigrationUrl)
+  ? readFileSync(qwen37MaxPriceMigrationUrl, "utf8")
+  : "";
 
 describe("database schema", () => {
   it("maps event, project identity, and model-price columns", () => {
@@ -89,7 +96,8 @@ describe("public database baseline", () => {
       "0004_task_metadata.sql",
       "0005_usage_event_cleanup_backups.sql",
       "0006_seed_gpt_5_5_price.sql",
-      "0007_seed_qwen_3_8_max_preview_price.sql"
+      "0007_seed_qwen_3_8_max_preview_price.sql",
+      "0008_seed_qwen_3_7_max_price.sql"
     ]);
     for (const table of ["usage_events", "daily_usage_rollups"]) {
       expect(bigintMigrationSql).toContain(`ALTER TABLE "${table}"`);
@@ -146,6 +154,36 @@ describe("public database baseline", () => {
       `WHERE "event"."model" = 'qwen3.8-max-preview'`
     );
     expect(qwen38MaxPreviewPriceMigrationSql).toContain(
+      'sum(coalesce("event"."cost_usd", 0))'
+    );
+  });
+
+  it("adds the Qwen3.7 Max price without overwriting an admin override", () => {
+    expect(qwen37MaxPriceMigrationSql).toContain(
+      "('qwen3.7-max', 0.8859, 2.6577, 0.0886, 1.1074)"
+    );
+    expect(qwen37MaxPriceMigrationSql).toContain('ON CONFLICT ("model") DO NOTHING');
+  });
+
+  it("repairs historical Qwen3.7 Max event costs and rebuilds only its rollups", () => {
+    expect(qwen37MaxPriceMigrationSql).toContain('UPDATE "usage_events" AS "event"');
+    expect(qwen37MaxPriceMigrationSql).toContain(
+      `"event"."model" = 'qwen3.7-max'`
+    );
+    expect(qwen37MaxPriceMigrationSql).toContain('DELETE FROM "daily_usage_rollups"');
+    expect(qwen37MaxPriceMigrationSql).toContain(
+      `"daily_usage_rollups"."model" = 'qwen3.7-max'`
+    );
+    expect(qwen37MaxPriceMigrationSql).toContain(
+      'INSERT INTO "daily_usage_rollups"'
+    );
+    expect(qwen37MaxPriceMigrationSql).toContain(
+      'FROM "usage_events" AS "event"'
+    );
+    expect(qwen37MaxPriceMigrationSql).toContain(
+      `WHERE "event"."model" = 'qwen3.7-max'`
+    );
+    expect(qwen37MaxPriceMigrationSql).toContain(
       'sum(coalesce("event"."cost_usd", 0))'
     );
   });
