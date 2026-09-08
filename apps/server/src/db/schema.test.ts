@@ -46,6 +46,13 @@ const qwen37MaxPriceMigrationUrl = new URL(
 const qwen37MaxPriceMigrationSql = existsSync(qwen37MaxPriceMigrationUrl)
   ? readFileSync(qwen37MaxPriceMigrationUrl, "utf8")
   : "";
+const gpt6AstraPriceMigrationUrl = new URL(
+  "./migrations/0009_seed_gpt_6_astra_price.sql",
+  import.meta.url
+);
+const gpt6AstraPriceMigrationSql = existsSync(gpt6AstraPriceMigrationUrl)
+  ? readFileSync(gpt6AstraPriceMigrationUrl, "utf8")
+  : "";
 
 describe("database schema", () => {
   it("maps event, project identity, and model-price columns", () => {
@@ -97,7 +104,8 @@ describe("public database baseline", () => {
       "0005_usage_event_cleanup_backups.sql",
       "0006_seed_gpt_5_5_price.sql",
       "0007_seed_qwen_3_8_max_preview_price.sql",
-      "0008_seed_qwen_3_7_max_price.sql"
+      "0008_seed_qwen_3_7_max_price.sql",
+      "0009_seed_gpt_6_astra_price.sql"
     ]);
     for (const table of ["usage_events", "daily_usage_rollups"]) {
       expect(bigintMigrationSql).toContain(`ALTER TABLE "${table}"`);
@@ -186,6 +194,28 @@ describe("public database baseline", () => {
     expect(qwen37MaxPriceMigrationSql).toContain(
       'sum(coalesce("event"."cost_usd", 0))'
     );
+  });
+
+  it("adds the GPT-6 Astra price without overwriting an admin override", () => {
+    expect(gpt6AstraPriceMigrationSql).toContain(
+      "('gpt-6-astra', 10.00, 50.00, 1.00, 12.50)"
+    );
+    expect(gpt6AstraPriceMigrationSql).toContain('ON CONFLICT ("model") DO NOTHING');
+  });
+
+  it("repairs historical GPT-6 Astra event costs and rebuilds only its rollups", () => {
+    expect(gpt6AstraPriceMigrationSql).toContain('UPDATE "usage_events" AS "event"');
+    expect(gpt6AstraPriceMigrationSql).toContain(`"event"."model" = 'gpt-6-astra'`);
+    expect(gpt6AstraPriceMigrationSql).toContain('DELETE FROM "daily_usage_rollups"');
+    expect(gpt6AstraPriceMigrationSql).toContain(
+      `"daily_usage_rollups"."model" = 'gpt-6-astra'`
+    );
+    expect(gpt6AstraPriceMigrationSql).toContain('INSERT INTO "daily_usage_rollups"');
+    expect(gpt6AstraPriceMigrationSql).toContain('FROM "usage_events" AS "event"');
+    expect(gpt6AstraPriceMigrationSql).toContain(
+      `WHERE "event"."model" = 'gpt-6-astra'`
+    );
+    expect(gpt6AstraPriceMigrationSql).toContain('sum(coalesce("event"."cost_usd", 0))');
   });
 
   it("creates every business table and required index", () => {
