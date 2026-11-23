@@ -105,7 +105,8 @@ describe("public database baseline", () => {
       "0006_seed_gpt_5_5_price.sql",
       "0007_seed_qwen_3_8_max_preview_price.sql",
       "0008_seed_qwen_3_7_max_price.sql",
-      "0009_seed_gpt_6_astra_price.sql"
+      "0009_seed_gpt_6_astra_price.sql",
+      "0010_seed_gpt_6_sol_and_6_2_prices.sql"
     ]);
     for (const table of ["usage_events", "daily_usage_rollups"]) {
       expect(bigintMigrationSql).toContain(`ALTER TABLE "${table}"`);
