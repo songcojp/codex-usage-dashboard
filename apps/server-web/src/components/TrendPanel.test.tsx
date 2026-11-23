@@ -8,7 +8,58 @@ const emptyProjectRatios = { daily: [], total: [] };
 const identity = (key: string) => key;
 
 describe("createTrendChartOption", () => {
-  test("filters the chart to cost without changing its source points", () => {
+  test("filters the chart to input, cache, and output costs without changing its source points", () => {
+    const points = [
+      {
+        day: "2026-05-30",
+        totalTokens: 100,
+        inputTokens: 40,
+        outputTokens: 30,
+        cacheReadTokens: 20,
+        cacheWriteTokens: 10,
+        costUsd: 0.125,
+        inputCostUsd: 0.04,
+        cacheCostUsd: 0.025,
+        outputCostUsd: 0.06,
+        eventCount: 1
+      }
+    ];
+    const option = createTrendChartOption(points, (key) => key, "en", "light", "daily", "cost");
+    expect(option.series).toHaveLength(3);
+    expect(option.series[0]).toEqual(expect.objectContaining({ name: "Input cost", data: [0.04] }));
+    expect(option.series[1]).toEqual(expect.objectContaining({ name: "Cache cost", data: [0.025] }));
+    expect(option.series[2]).toEqual(expect.objectContaining({ name: "Output cost", data: [0.06] }));
+    expect(option.tooltip.valueFormatter(0.025)).toBe("$0.03");
+    expect(option.yAxis.axisLabel.formatter(0.025)).toBe("$0.03");
+    expect(option.series[1].tooltip.valueFormatter(0.025)).toBe("$0.03");
+    expect(points[0].cacheWriteTokens).toBe(10);
+  });
+
+  test("formats the total cost series to two decimals without formatting token series as currency", () => {
+    const points = [
+      {
+        day: "2026-05-30",
+        totalTokens: 100,
+        inputTokens: 40,
+        outputTokens: 30,
+        cacheReadTokens: 20,
+        cacheWriteTokens: 10,
+        costUsd: 0.125,
+        inputCostUsd: 0.04,
+        cacheCostUsd: 0.025,
+        outputCostUsd: 0.06,
+        eventCount: 1
+      }
+    ];
+
+    const option = createTrendChartOption(points, identity, "en", "light", "daily", "all");
+
+    expect(option.series[0].tooltip).toBeUndefined();
+    expect(option.series[4].data).toEqual([0.125]);
+    expect(option.series[4].tooltip.valueFormatter(0.125)).toBe("$0.13");
+  });
+
+  test("adds daily token category percentages to the token tooltip", () => {
     const points = [
       {
         day: "2026-05-30",
@@ -21,10 +72,81 @@ describe("createTrendChartOption", () => {
         eventCount: 1
       }
     ];
-    const option = createTrendChartOption(points, (key) => key, "en", "light", "daily", "cost");
-    expect(option.series).toHaveLength(1);
-    expect(option.series[0]).toEqual(expect.objectContaining({ name: "Cost", data: [0.125] }));
-    expect(points[0].cacheWriteTokens).toBe(10);
+
+    const option = createTrendChartOption(points, identity, "en", "light", "daily", "tokens");
+    const tooltip = option.tooltip.formatter([
+      { axisValueLabel: "05-30", dataIndex: 0, marker: "", seriesName: "Total tokens", value: 100 },
+      { axisValueLabel: "05-30", dataIndex: 0, marker: "", seriesName: "Input", value: 40 },
+      { axisValueLabel: "05-30", dataIndex: 0, marker: "", seriesName: "Output", value: 30 },
+      { axisValueLabel: "05-30", dataIndex: 0, marker: "", seriesName: "Cache", value: 30 }
+    ]);
+
+    expect(tooltip).toContain("Total tokens: 100");
+    expect(tooltip).toContain("Input: 40 (40.0%)");
+    expect(tooltip).toContain("Output: 30 (30.0%)");
+    expect(tooltip).toContain("Cache: 30 (30.0%)");
+  });
+
+  test("keeps cumulative token tooltips numeric-only", () => {
+    const option = createTrendChartOption(
+      [
+        {
+          day: "2026-05-30",
+          totalTokens: 100,
+          inputTokens: 40,
+          outputTokens: 30,
+          cacheReadTokens: 20,
+          cacheWriteTokens: 10,
+          costUsd: 0.125,
+          eventCount: 1
+        }
+      ],
+      identity,
+      "en",
+      "light",
+      "cumulative",
+      "tokens"
+    );
+
+    expect(option.tooltip.formatter).toBeUndefined();
+    expect(option.tooltip.valueFormatter).toBeUndefined();
+  });
+
+  test("accumulates input, cache, and output cost series independently", () => {
+    const points = [
+      {
+        day: "2026-05-30",
+        totalTokens: 100,
+        inputTokens: 40,
+        outputTokens: 30,
+        cacheReadTokens: 20,
+        cacheWriteTokens: 10,
+        costUsd: 6,
+        inputCostUsd: 1,
+        cacheCostUsd: 2,
+        outputCostUsd: 3,
+        eventCount: 1
+      },
+      {
+        day: "2026-05-31",
+        totalTokens: 200,
+        inputTokens: 80,
+        outputTokens: 60,
+        cacheReadTokens: 40,
+        cacheWriteTokens: 20,
+        costUsd: 15,
+        inputCostUsd: 4,
+        cacheCostUsd: 5,
+        outputCostUsd: 6,
+        eventCount: 1
+      }
+    ];
+
+    const option = createTrendChartOption(points, identity, "en", "light", "cumulative", "cost");
+
+    expect(option.series[0]).toEqual(expect.objectContaining({ name: "Input cost", data: [1, 5] }));
+    expect(option.series[1]).toEqual(expect.objectContaining({ name: "Cache cost", data: [2, 7] }));
+    expect(option.series[2]).toEqual(expect.objectContaining({ name: "Output cost", data: [3, 9] }));
   });
 
   test("generates correct options for token-ratio and cost-ratio", () => {
@@ -66,7 +188,7 @@ describe("createTrendChartOption", () => {
 
   });
 
-  test("calculates tool share from tokens instead of cost", () => {
+  test("calculates tool percentages from tokens instead of cost", () => {
     const points = [
       {
         day: "2026-07-15",
@@ -143,7 +265,7 @@ describe("createTrendChartOption", () => {
     );
   });
 
-  test("calculates daily project shares and fills missing project days with zero", () => {
+  test("calculates daily project percentages and fills missing project days with zero", () => {
     const projectRatios = {
       daily: [
         {
@@ -182,7 +304,7 @@ describe("createTrendChartOption", () => {
     expect(projectRatios).toEqual(source);
   });
 
-  test("renders all-time project shares as a pie using raw token totals", () => {
+  test("renders all-time project percentages as a pie using raw token totals", () => {
     const projectRatios = {
       daily: [],
       total: [
@@ -217,15 +339,28 @@ describe("createTrendChartOption", () => {
 });
 
 describe("TrendPanel controls", () => {
-  test("uses tool and project terminology in Chinese", () => {
-    expect(translations.zh["Tool ratio"]).toBe("工具占比");
+  test("uses ratio terminology in all non-English locales", () => {
+    expect(translations.zh["Tools ratio"]).toBe("工具占比");
     expect(translations.zh["Project ratio"]).toBe("项目占比");
+    expect(translations.zh["Token ratio"]).toBe("Token 类型占比");
+    expect(translations.zh["Cost ratio"]).toBe("费用占比");
     expect(translations.zh.Total).toBe("总量");
     expect(translations.zh["No tools"]).toBe("无工具数据");
     expect(translations.zh["No project usage"]).toBe("无项目用量数据");
+    expect(translations.zh["Input cost"]).toBe("输入成本");
+    expect(translations.zh["Cache cost"]).toBe("缓存成本");
+    expect(translations.zh["Output cost"]).toBe("输出成本");
+    expect(translations.ja["Tools ratio"]).toBe("ツール割合");
+    expect(translations.ja["Project ratio"]).toBe("プロジェクト割合");
+    expect(translations.ja["Token ratio"]).toBe("トークンタイプ割合");
+    expect(translations.ja["Cost ratio"]).toBe("費用割合");
+    expect(translations.ko["Tools ratio"]).toBe("도구 비율");
+    expect(translations.ko["Project ratio"]).toBe("프로젝트 비율");
+    expect(translations.ko["Token ratio"]).toBe("토큰 유형 비율");
+    expect(translations.ko["Cost ratio"]).toBe("비용 비율");
   });
 
-  test("labels project total mode separately from cumulative trends", () => {
+  test("keeps absolute trend labels unchanged and labels ratio filters explicitly", () => {
     render(
       <TrendPanel
         points={[]}
@@ -238,6 +373,13 @@ describe("TrendPanel controls", () => {
       />
     );
 
+    expect(screen.getByRole("button", { name: "All" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Tokens" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cost" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Tools ratio" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Token ratio" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cost ratio" })).toBeTruthy();
+
     fireEvent.click(screen.getByRole("button", { name: "Project ratio" }));
     expect(screen.getByRole("heading", { name: "Project ratio" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Total" })).toBeTruthy();
@@ -247,7 +389,7 @@ describe("TrendPanel controls", () => {
     fireEvent.click(screen.getByRole("button", { name: "Total" }));
     expect(screen.queryByText("2026-07-01 to 2026-07-15 (UTC)")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Tool ratio" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tools ratio" }));
     expect(screen.getByRole("button", { name: "Cumulative" })).toBeTruthy();
   });
 });

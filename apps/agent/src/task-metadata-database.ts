@@ -7,6 +7,7 @@ import {
 } from "@codex-usage-dashboard/shared";
 import Database from "better-sqlite3";
 import type { AgentConfig } from "./config.js";
+import { discoverMulticaCodexHomes, isMulticaWorkspaceRoot } from "./multica.js";
 
 export type TaskMetadataDatabaseResult = {
   tasks: TaskMetadataDraft[];
@@ -20,6 +21,12 @@ export async function discoverTaskDatabasePaths(input: {
 }): Promise<string[]> {
   const directories = new Set<string>();
   for (const sourceRoot of input.config.toolPaths["codex-cli"] ?? []) {
+    if (isMulticaWorkspaceRoot(sourceRoot)) {
+      for (const codexHome of await discoverMulticaCodexHomes(sourceRoot)) {
+        directories.add(codexHome);
+      }
+      continue;
+    }
     const found = await findDatabaseDirectoryInAncestors(sourceRoot);
     if (found) directories.add(found);
   }

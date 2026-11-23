@@ -130,8 +130,17 @@ describe("admin dashboard rendering", () => {
     expect(screen.getByText("Cache read")).toBeTruthy();
     expect(screen.queryByText("Cache write")).toBeNull();
     expect(screen.getAllByText("Cost").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("$0.1250").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("$0.13").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("$0.1250")).toBeNull();
+    expect(screen.getByRole("tab", { name: "Tasks", selected: true })).toBeTruthy();
+    expect(screen.getByText("task-1")).toBeTruthy();
+    expect(screen.getByText("Duration (min)")).toBeTruthy();
+    expect(screen.getByText("60")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Events" }));
     expect(screen.getByText("2026-05-30 12:00 UTC")).toBeTruthy();
+    expect(screen.getByText("$0.0050")).toBeTruthy();
+    expect(screen.queryByText("$0.00")).toBeNull();
     expect(screen.queryByLabelText("Token metrics")?.textContent).not.toContain("Events");
     expect((screen.getByRole("button", { name: "Previous" }) as HTMLButtonElement).disabled).toBe(
       true
@@ -139,7 +148,6 @@ describe("admin dashboard rendering", () => {
     expect((screen.getByRole("button", { name: "Next" }) as HTMLButtonElement).disabled).toBe(false);
 
     fireEvent.click(screen.getByRole("tab", { name: "Tasks" }));
-    expect(screen.getByText("task-1")).toBeTruthy();
     expect(screen.getByText("2026-05-30 11:00 UTC")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Sort"), {
       target: { value: "eventCount-desc" }
@@ -363,6 +371,9 @@ function handleRequest(input: RequestInfo | URL) {
   if (path.startsWith("/api/admin/project-ratios")) {
     return response({ daily: [], total: [] });
   }
+  if (path.startsWith("/api/admin/model-ratios")) {
+    return response({ daily: [], total: [] });
+  }
   if (path.startsWith("/api/admin/events")) {
     return response({
       total: 60,
@@ -378,7 +389,7 @@ function handleRequest(input: RequestInfo | URL) {
           outputTokens: 7,
           cacheReadTokens: 6,
           cacheWriteTokens: 5,
-          costUsd: 0.125,
+          costUsd: 0.0049985,
           totalTokens: 26
         }
       ]

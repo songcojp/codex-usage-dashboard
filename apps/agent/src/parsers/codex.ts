@@ -180,6 +180,10 @@ function classifyCodexSessionTool(
     return "codex-desktop";
   }
 
+  if (originator === "multica-agent-sdk") {
+    return "codex-cli";
+  }
+
   if (originator === "codex_vscode" || source === "vscode") {
     return "codex-vscode-plugin";
   }

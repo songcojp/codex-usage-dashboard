@@ -6,6 +6,7 @@ import {
   type TaskMetadataDraft
 } from "@codex-usage-dashboard/shared";
 import type { AgentConfig } from "./config.js";
+import { discoverMulticaCodexHomes, isMulticaWorkspaceRoot } from "./multica.js";
 
 export type TaskMetadataIndexResult = {
   tasks: TaskMetadataDraft[];
@@ -20,6 +21,12 @@ export async function discoverTaskIndexPaths(input: {
 }): Promise<string[]> {
   const candidates = new Set<string>();
   for (const sourceRoot of input.config.toolPaths["codex-cli"] ?? []) {
+    if (isMulticaWorkspaceRoot(sourceRoot)) {
+      for (const codexHome of await discoverMulticaCodexHomes(sourceRoot)) {
+        candidates.add(path.join(codexHome, "session_index.jsonl"));
+      }
+      continue;
+    }
     const found = await findIndexInAncestors(sourceRoot);
     if (found) candidates.add(found);
   }

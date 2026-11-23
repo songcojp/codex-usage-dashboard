@@ -10,7 +10,6 @@ INSERT INTO "model_prices" (
 )
 VALUES
   ('gpt-6-sol', 2.00, 10.00, 0.20, 2.50),
-  ('gpt-6-astra', 10.00, 50.00, 1.00, 12.50),
   ('gpt-6.2-sol', 2.00, 10.00, 0.10, 2.50),
   ('gpt-6.2-astra', 8.00, 40.00, 0.40, 10.00)
 ON CONFLICT ("model") DO NOTHING;

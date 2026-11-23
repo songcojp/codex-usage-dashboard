@@ -1,7 +1,14 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { calculateMigrationChecksum, verifyAppliedMigrationChecksum } from "./migrate.js";
-import { dailyUsageRollups, modelPrices, projects, taskMetadata, usageEvents } from "./schema.js";
+import {
+  dailyUsageRollups,
+  modelPrices,
+  projects,
+  taskMetadata,
+  usageEventCleanupBackups,
+  usageEvents
+} from "./schema.js";
 
 const migrationsUrl = new URL("./migrations/", import.meta.url);
 const migrationFiles = readdirSync(migrationsUrl).filter((file) => file.endsWith(".sql")).sort();
@@ -13,6 +20,38 @@ const bigintMigrationSql = existsSync(bigintMigrationUrl)
 const taskMetadataMigrationUrl = new URL("./migrations/0004_task_metadata.sql", import.meta.url);
 const taskMetadataMigrationSql = existsSync(taskMetadataMigrationUrl)
   ? readFileSync(taskMetadataMigrationUrl, "utf8")
+  : "";
+const cleanupBackupMigrationUrl = new URL(
+  "./migrations/0005_usage_event_cleanup_backups.sql",
+  import.meta.url
+);
+const cleanupBackupMigrationSql = existsSync(cleanupBackupMigrationUrl)
+  ? readFileSync(cleanupBackupMigrationUrl, "utf8")
+  : "";
+const gpt55PriceMigrationUrl = new URL("./migrations/0006_seed_gpt_5_5_price.sql", import.meta.url);
+const gpt55PriceMigrationSql = existsSync(gpt55PriceMigrationUrl)
+  ? readFileSync(gpt55PriceMigrationUrl, "utf8")
+  : "";
+const qwen38MaxPreviewPriceMigrationUrl = new URL(
+  "./migrations/0007_seed_qwen_3_8_max_preview_price.sql",
+  import.meta.url
+);
+const qwen38MaxPreviewPriceMigrationSql = existsSync(qwen38MaxPreviewPriceMigrationUrl)
+  ? readFileSync(qwen38MaxPreviewPriceMigrationUrl, "utf8")
+  : "";
+const qwen37MaxPriceMigrationUrl = new URL(
+  "./migrations/0008_seed_qwen_3_7_max_price.sql",
+  import.meta.url
+);
+const qwen37MaxPriceMigrationSql = existsSync(qwen37MaxPriceMigrationUrl)
+  ? readFileSync(qwen37MaxPriceMigrationUrl, "utf8")
+  : "";
+const gpt6AstraPriceMigrationUrl = new URL(
+  "./migrations/0009_seed_gpt_6_astra_price.sql",
+  import.meta.url
+);
+const gpt6AstraPriceMigrationSql = existsSync(gpt6AstraPriceMigrationUrl)
+  ? readFileSync(gpt6AstraPriceMigrationUrl, "utf8")
   : "";
 
 describe("database schema", () => {
@@ -26,6 +65,9 @@ describe("database schema", () => {
     expect(taskMetadata.title.notNull).toBe(true);
     expect(taskMetadata.sourceUpdatedAt.name).toBe("source_updated_at");
     expect(taskMetadata.deviceId.name).toBe("device_id");
+    expect(usageEventCleanupBackups.batchId.name).toBe("batch_id");
+    expect(usageEventCleanupBackups.usageEventId.name).toBe("usage_event_id");
+    expect(usageEventCleanupBackups.rowData.name).toBe("row_data");
     expect(projects.repoHash.notNull).toBe(true);
     expect(projects.repoHash.default).toBe("");
     expect(projects.remoteHash.notNull).toBe(true);
@@ -59,7 +101,12 @@ describe("public database baseline", () => {
       "0002_bigint_usage_counters.sql",
       "0003_usage_event_task_ids.sql",
       "0004_task_metadata.sql",
-      "0005_current_model_prices.sql"
+      "0005_usage_event_cleanup_backups.sql",
+      "0006_seed_gpt_5_5_price.sql",
+      "0007_seed_qwen_3_8_max_preview_price.sql",
+      "0008_seed_qwen_3_7_max_price.sql",
+      "0009_seed_gpt_6_astra_price.sql",
+      "0010_seed_gpt_6_sol_and_6_2_prices.sql"
     ]);
     for (const table of ["usage_events", "daily_usage_rollups"]) {
       expect(bigintMigrationSql).toContain(`ALTER TABLE "${table}"`);
@@ -78,6 +125,98 @@ describe("public database baseline", () => {
     expect(taskMetadataMigrationSql).toContain('CREATE TABLE "task_metadata"');
     expect(taskMetadataMigrationSql).toContain('PRIMARY KEY');
     expect(taskMetadataMigrationSql).toContain('REFERENCES "devices" ("id")');
+    expect(cleanupBackupMigrationSql).toContain(
+      'CREATE TABLE IF NOT EXISTS "usage_event_cleanup_backups"'
+    );
+    expect(cleanupBackupMigrationSql).toContain('PRIMARY KEY ("batch_id", "usage_event_id")');
+    expect(cleanupBackupMigrationSql).toContain('"usage_event_cleanup_backups_event_idx"');
+  });
+
+  it("adds the missing GPT-5.5 price without overwriting an admin override", () => {
+    expect(gpt55PriceMigrationSql).toContain("('gpt-5.5', 5.00, 30.00, 0.50, 6.25)");
+    expect(gpt55PriceMigrationSql).toContain('ON CONFLICT ("model") DO NOTHING');
+  });
+
+  it("adds the Qwen3.8 Max Preview price without overwriting an admin override", () => {
+    expect(qwen38MaxPreviewPriceMigrationSql).toContain(
+      "('qwen3.8-max-preview', 0.0886, 0.2658, 0.0089, 0.1107)"
+    );
+    expect(qwen38MaxPreviewPriceMigrationSql).toContain('ON CONFLICT ("model") DO NOTHING');
+  });
+
+  it("repairs historical Qwen3.8 Max Preview event costs and rebuilds its rollups", () => {
+    expect(qwen38MaxPreviewPriceMigrationSql).toContain('UPDATE "usage_events" AS "event"');
+    expect(qwen38MaxPreviewPriceMigrationSql).toContain(
+      `"event"."model" = 'qwen3.8-max-preview'`
+    );
+    expect(qwen38MaxPreviewPriceMigrationSql).toContain('DELETE FROM "daily_usage_rollups"');
+    expect(qwen38MaxPreviewPriceMigrationSql).toContain(
+      `"daily_usage_rollups"."model" = 'qwen3.8-max-preview'`
+    );
+    expect(qwen38MaxPreviewPriceMigrationSql).toContain(
+      'INSERT INTO "daily_usage_rollups"'
+    );
+    expect(qwen38MaxPreviewPriceMigrationSql).toContain(
+      'FROM "usage_events" AS "event"'
+    );
+    expect(qwen38MaxPreviewPriceMigrationSql).toContain(
+      `WHERE "event"."model" = 'qwen3.8-max-preview'`
+    );
+    expect(qwen38MaxPreviewPriceMigrationSql).toContain(
+      'sum(coalesce("event"."cost_usd", 0))'
+    );
+  });
+
+  it("adds the Qwen3.7 Max price without overwriting an admin override", () => {
+    expect(qwen37MaxPriceMigrationSql).toContain(
+      "('qwen3.7-max', 0.8859, 2.6577, 0.0886, 1.1074)"
+    );
+    expect(qwen37MaxPriceMigrationSql).toContain('ON CONFLICT ("model") DO NOTHING');
+  });
+
+  it("repairs historical Qwen3.7 Max event costs and rebuilds only its rollups", () => {
+    expect(qwen37MaxPriceMigrationSql).toContain('UPDATE "usage_events" AS "event"');
+    expect(qwen37MaxPriceMigrationSql).toContain(
+      `"event"."model" = 'qwen3.7-max'`
+    );
+    expect(qwen37MaxPriceMigrationSql).toContain('DELETE FROM "daily_usage_rollups"');
+    expect(qwen37MaxPriceMigrationSql).toContain(
+      `"daily_usage_rollups"."model" = 'qwen3.7-max'`
+    );
+    expect(qwen37MaxPriceMigrationSql).toContain(
+      'INSERT INTO "daily_usage_rollups"'
+    );
+    expect(qwen37MaxPriceMigrationSql).toContain(
+      'FROM "usage_events" AS "event"'
+    );
+    expect(qwen37MaxPriceMigrationSql).toContain(
+      `WHERE "event"."model" = 'qwen3.7-max'`
+    );
+    expect(qwen37MaxPriceMigrationSql).toContain(
+      'sum(coalesce("event"."cost_usd", 0))'
+    );
+  });
+
+  it("adds the GPT-6 Astra price without overwriting an admin override", () => {
+    expect(gpt6AstraPriceMigrationSql).toContain(
+      "('gpt-6-astra', 10.00, 50.00, 1.00, 12.50)"
+    );
+    expect(gpt6AstraPriceMigrationSql).toContain('ON CONFLICT ("model") DO NOTHING');
+  });
+
+  it("repairs historical GPT-6 Astra event costs and rebuilds only its rollups", () => {
+    expect(gpt6AstraPriceMigrationSql).toContain('UPDATE "usage_events" AS "event"');
+    expect(gpt6AstraPriceMigrationSql).toContain(`"event"."model" = 'gpt-6-astra'`);
+    expect(gpt6AstraPriceMigrationSql).toContain('DELETE FROM "daily_usage_rollups"');
+    expect(gpt6AstraPriceMigrationSql).toContain(
+      `"daily_usage_rollups"."model" = 'gpt-6-astra'`
+    );
+    expect(gpt6AstraPriceMigrationSql).toContain('INSERT INTO "daily_usage_rollups"');
+    expect(gpt6AstraPriceMigrationSql).toContain('FROM "usage_events" AS "event"');
+    expect(gpt6AstraPriceMigrationSql).toContain(
+      `WHERE "event"."model" = 'gpt-6-astra'`
+    );
+    expect(gpt6AstraPriceMigrationSql).toContain('sum(coalesce("event"."cost_usd", 0))');
   });
 
   it("creates every business table and required index", () => {

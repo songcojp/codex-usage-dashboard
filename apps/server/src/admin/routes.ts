@@ -112,6 +112,16 @@ export async function registerAdminRoutes(
     return queryService.getProjectRatios({ ...filters, projectId: undefined });
   });
 
+  app.get("/api/admin/model-ratios", async (request, reply) => {
+    if (!requireAdmin(request, reply, env)) return;
+    const filters = parseUsageFilters(request.query);
+    if (!filters) {
+      return reply.code(400).send({ error: "invalid filters" });
+    }
+
+    return queryService.getModelRatios({ ...filters, model: undefined });
+  });
+
   app.get("/api/admin/events", async (request, reply) => {
     if (!requireAdmin(request, reply, env)) return;
     const filters = parseUsageFilters(request.query);

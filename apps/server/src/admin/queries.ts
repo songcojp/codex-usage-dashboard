@@ -73,6 +73,16 @@ export type ProjectRatioResponse = {
   total: ProjectRatioItem[];
 };
 
+export type ModelRatioItem = {
+  model: string;
+  totalTokens: number;
+};
+
+export type ModelRatioResponse = {
+  daily: Array<{ day: string; models: ModelRatioItem[] }>;
+  total: ModelRatioItem[];
+};
+
 export type ModelPriceInput = {
   model: string;
   inputCostPerMillionUsd: number;
@@ -85,6 +95,7 @@ export type AdminQueryService = {
   getSummary(filters: UsageFilters): Promise<UsageSummary>;
   getTrends(filters: UsageFilters): Promise<{ points: Array<Record<string, unknown>> }>;
   getProjectRatios(filters: UsageFilters): Promise<ProjectRatioResponse>;
+  getModelRatios(filters: UsageFilters): Promise<ModelRatioResponse>;
   getEvents(
     filters: UsageFilters & { limit?: number; offset?: number; sortBy?: EventSortBy; sortDir?: SortDir }
   ): Promise<{
@@ -133,6 +144,12 @@ type ProjectRatioRow = {
   id: string;
   displayName: string;
   repoHash: string | null;
+  totalTokens: string | number | null | undefined;
+};
+
+type ModelRatioRow = {
+  day: string;
+  model: string;
   totalTokens: string | number | null | undefined;
 };
 
@@ -298,6 +315,38 @@ export function createAdminQueryService(db?: AdminDb): AdminQueryService {
       ]);
 
       return createProjectRatioResponse(dailyRows, totalRows);
+    },
+
+    async getModelRatios(filters) {
+      const day = reportingDaySql(filters);
+      const model = sql<string>`coalesce(${usageEvents.model}, 'unknown')`;
+      const ratioFilters = { ...filters, model: undefined };
+      const [dailyRows, totalRows] = await Promise.all([
+        adminDb()
+          .select({
+            day,
+            model,
+            totalTokens: sum(usageEvents.totalTokens)
+          })
+          .from(usageEvents)
+          .innerJoin(tools, eq(usageEvents.toolId, tools.id))
+          .where(eventWhere(ratioFilters))
+          .groupBy(day, model)
+          .orderBy(day, model),
+        adminDb()
+          .select({
+            day: sql<string>`''`,
+            model,
+            totalTokens: sum(usageEvents.totalTokens)
+          })
+          .from(usageEvents)
+          .innerJoin(tools, eq(usageEvents.toolId, tools.id))
+          .where(eventWhere(ratioFilters))
+          .groupBy(model)
+          .orderBy(model)
+      ]);
+
+      return createModelRatioResponse(dailyRows, totalRows);
     },
 
     async getEvents(filters) {
@@ -707,6 +756,30 @@ export function createProjectRatioResponse(
   return {
     daily: [...daily].map(([day, projects]) => ({ day, projects })),
     total: mergeProjectRatioRows(totalRows).map(({ day: _day, ...project }) => project)
+  };
+}
+
+export function createModelRatioResponse(
+  dailyRows: ModelRatioRow[],
+  totalRows: ModelRatioRow[]
+): ModelRatioResponse {
+  const daily = new Map<string, ModelRatioItem[]>();
+
+  for (const row of dailyRows) {
+    const modelsForDay = daily.get(row.day) ?? [];
+    modelsForDay.push({
+      model: row.model,
+      totalTokens: numberFromAggregate(row.totalTokens)
+    });
+    daily.set(row.day, modelsForDay);
+  }
+
+  return {
+    daily: [...daily].map(([day, models]) => ({ day, models })),
+    total: totalRows.map((row) => ({
+      model: row.model,
+      totalTokens: numberFromAggregate(row.totalTokens)
+    }))
   };
 }
 

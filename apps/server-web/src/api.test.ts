@@ -43,6 +43,7 @@ describe("admin API client", () => {
       if (path.startsWith("/api/admin/summary")) return jsonResponse(emptySummary());
       if (path.startsWith("/api/admin/trends")) return jsonResponse({ points: [] });
       if (path.startsWith("/api/admin/project-ratios")) return jsonResponse({ daily: [], total: [] });
+      if (path.startsWith("/api/admin/model-ratios")) return jsonResponse({ daily: [], total: [] });
       if (path.startsWith("/api/admin/events")) return jsonResponse({ rows: [], total: 0 });
       if (path.startsWith("/api/admin/tasks")) return jsonResponse({ rows: [{ taskId: "task-1" }], total: 1 });
       if (path.startsWith("/api/admin/devices")) return jsonResponse({ rows: [] });

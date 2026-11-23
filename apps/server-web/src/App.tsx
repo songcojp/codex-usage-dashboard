@@ -101,7 +101,7 @@ export function App() {
   const [utcNow, setUtcNow] = useState(() => new Date());
   const [filters, setFilters] = useState<UsageFilters>(() => defaultFilters());
   const [data, setData] = useState<DashboardData | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>("events");
+  const [activeTab, setActiveTab] = useState<Tab>("tasks");
   const [activeSection, setActiveSection] = useState<DashboardSection>("overview");
   const [eventOffset, setEventOffset] = useState(0);
   const [eventSort, setEventSort] = useState<EventSort>("occurredAt-desc");
@@ -361,6 +361,7 @@ export function App() {
             initialLoading={loading && !data}
             language={language}
             meta={`${filters.from} to ${filters.to} (${filters.timeZone})`}
+            modelRatios={data?.modelRatios ?? { daily: [], total: [] }}
             points={data?.trends.points ?? []}
             projectRatios={data?.projectRatios ?? { daily: [], total: [] }}
             t={t}
@@ -1006,7 +1007,7 @@ function EventsTable({
                 <td className="numeric">{formatNumber(row.outputTokens)}</td>
                 <td className="numeric">{formatNumber(row.cacheReadTokens + row.cacheWriteTokens)}</td>
                 <td className="numeric strong">{formatNumber(row.totalTokens)}</td>
-                <td className="numeric strong">{formatCurrency(row.costUsd)}</td>
+                <td className="numeric strong">{formatEventCurrency(row.costUsd)}</td>
               </tr>
             ))}
             {rows.length === 0 ? <EmptyRow columns={8} label={t("No usage events in this range")} /> : null}
@@ -1401,7 +1402,15 @@ function formatMetricNumber(value: number): string {
 }
 
 function formatCurrency(value: number): string {
-  return `$${value.toFixed(4)}`;
+  return `$${value.toFixed(2)}`;
+}
+
+function formatEventCurrency(value: number): string {
+  if (value !== 0 && Math.abs(value) < 0.01) {
+    return `$${value.toFixed(4)}`;
+  }
+
+  return formatCurrency(value);
 }
 
 function formatMetricCurrency(value: number): string {

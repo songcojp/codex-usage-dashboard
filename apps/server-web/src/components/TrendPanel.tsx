@@ -3,7 +3,7 @@ import { GridComponent, LegendComponent, TooltipComponent } from "echarts/compon
 import { type ECharts, init, use } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ProjectRatioResponse, TrendPoint } from "../api.js";
+import type { ModelRatioResponse, ProjectRatioResponse, TrendPoint } from "../api.js";
 import type { Language, Theme, Translate } from "../dashboard-types.js";
 
 use([GridComponent, LegendComponent, LineChart, PieChart, TooltipComponent, CanvasRenderer]);
@@ -13,6 +13,7 @@ type TrendFilter =
   | "all"
   | "tokens"
   | "cost"
+  | "model"
   | "tool-ratio"
   | "project-ratio"
   | "token-ratio"
@@ -21,6 +22,7 @@ type TrendFilter =
 type TrendPanelProps = {
   points: TrendPoint[];
   projectRatios: ProjectRatioResponse;
+  modelRatios?: ModelRatioResponse;
   initialLoading: boolean;
   language: Language;
   theme: Theme;
@@ -31,6 +33,7 @@ type TrendPanelProps = {
 export function TrendPanel({
   points,
   projectRatios,
+  modelRatios = { daily: [], total: [] },
   initialLoading,
   language,
   theme,
@@ -45,8 +48,8 @@ export function TrendPanel({
       <div className="chart-header-row">
         <div className="panel-header">
           <div>
-            <h2>{t(trendFilter === "project-ratio" ? "Project ratio" : "Usage trend")}</h2>
-            {meta && !(trendFilter === "project-ratio" && trendMode === "cumulative") ? (
+            <h2>{t(trendFilter === "project-ratio" ? "Project ratio" : trendFilter === "model" ? "Model usage" : "Usage trend")}</h2>
+            {meta && !((trendFilter === "project-ratio" || trendFilter === "model") && trendMode === "cumulative") ? (
               <p>{meta}</p>
             ) : null}
           </div>
@@ -65,11 +68,11 @@ export function TrendPanel({
               onClick={() => setTrendMode("cumulative")}
               type="button"
             >
-              {t(trendFilter === "project-ratio" ? "Total" : "Cumulative")}
+              {t(trendFilter === "project-ratio" || trendFilter === "model" ? "Total" : "Cumulative")}
             </button>
           </div>
           <div className="toggle-group" role="group" aria-label="Trend Filter">
-            {(["all", "tokens", "cost", "tool-ratio", "project-ratio", "token-ratio", "cost-ratio"] as const).map((filter) => (
+            {(["all", "tokens", "cost", "model", "tool-ratio", "project-ratio", "token-ratio", "cost-ratio"] as const).map((filter) => (
               <button
                 className={trendFilter === filter ? "toggle-btn active" : "toggle-btn"}
                 key={filter}
@@ -83,8 +86,10 @@ export function TrendPanel({
                     ? "Tokens"
                     : filter === "cost"
                     ? "Cost"
+                    : filter === "model"
+                    ? "Model"
                     : filter === "tool-ratio"
-                    ? "Tool ratio"
+                    ? "Tools ratio"
                     : filter === "project-ratio"
                     ? "Project ratio"
                     : filter === "token-ratio"
@@ -99,6 +104,7 @@ export function TrendPanel({
       <TrendChart
         initialLoading={initialLoading}
         language={language}
+        modelRatios={modelRatios}
         points={points}
         projectRatios={projectRatios}
         t={t}
@@ -117,7 +123,8 @@ export function createTrendChartOption(
   theme: Theme = "light",
   trendMode: TrendMode = "daily",
   trendFilter: TrendFilter = "all",
-  projectRatios: ProjectRatioResponse = { daily: [], total: [] }
+  projectRatios: ProjectRatioResponse = { daily: [], total: [] },
+  modelRatios: ModelRatioResponse = { daily: [], total: [] }
 ): any {
   let processedPoints = [...points];
   if (trendMode === "cumulative") {
@@ -179,6 +186,48 @@ export function createTrendChartOption(
   const splitLineColor = theme === "dark" ? "#243754" : "#e8edf3";
   const axisLineColor = theme === "dark" ? "#354965" : "#d9e1eb";
 
+  if (trendFilter === "model" && trendMode === "cumulative") {
+    return {
+      backgroundColor: theme === "dark" ? "#0d1b2e" : "#ffffff",
+      color: colors,
+      tooltip: {
+        trigger: "item",
+        formatter: (params: PieTooltipParam) => {
+          const count = formatTokenValue(params.value ?? 0, language);
+          const percentage = Number(params.percent ?? 0).toFixed(1);
+          return `${params.marker ?? ""}${escapeHtml(params.name ?? "")}: ${escapeHtml(count)} Token (${percentage}%)`;
+        },
+        backgroundColor: theme === "dark" ? "#0d213f" : "#ffffff",
+        borderColor: axisLineColor,
+        textStyle: { color: theme === "dark" ? "#f5f7fa" : "#0b1830" }
+      },
+      legend: {
+        type: "scroll",
+        top: 0,
+        left: 0,
+        right: 0,
+        textStyle: { color: textColor }
+      },
+      series: [
+        {
+          name: t("Model usage"),
+          type: "pie",
+          radius: ["42%", "70%"],
+          center: ["50%", "56%"],
+          avoidLabelOverlap: true,
+          itemStyle: {
+            borderColor: theme === "dark" ? "#0d1b2e" : "#ffffff",
+            borderWidth: 2
+          },
+          label: { color: textColor, formatter: "{b}\n{d}%" },
+          data: modelRatios.total
+            .filter((item) => item.totalTokens > 0)
+            .map((item) => ({ name: item.model, value: item.totalTokens }))
+        }
+      ]
+    };
+  }
+
   if (trendFilter === "project-ratio" && trendMode === "cumulative") {
     return {
       backgroundColor: theme === "dark" ? "#0d1b2e" : "#ffffff",
@@ -221,7 +270,22 @@ export function createTrendChartOption(
   const isRatio = trendFilter.endsWith("-ratio");
   let axisDays = processedPoints.map((point) => point.day);
 
-  if (trendFilter === "project-ratio") {
+  if (trendFilter === "model") {
+    axisDays = modelRatios.daily.map((point) => point.day);
+    const modelNames = Array.from(
+      new Set(modelRatios.daily.flatMap((point) => point.models.map((item) => item.model)))
+    ).sort((left, right) => left.localeCompare(right));
+
+    visibleSeries = modelNames.map((model, index) =>
+      makeSeries(
+        model,
+        modelRatios.daily.map(
+          (point) => point.models.find((item) => item.model === model)?.totalTokens ?? 0
+        ),
+        colors[index % colors.length]
+      )
+    );
+  } else if (trendFilter === "project-ratio") {
     axisDays = projectRatios.daily.map((point) => point.day);
     const projectNames = new Map<string, string>();
     for (const point of projectRatios.daily) {
@@ -328,17 +392,32 @@ export function createTrendChartOption(
       input: processedPoints.map((point) => point.inputTokens),
       output: processedPoints.map((point) => point.outputTokens),
       cache: processedPoints.map((point) => point.cacheReadTokens + point.cacheWriteTokens),
-      cost: processedPoints.map((point) => point.costUsd)
+      cost: processedPoints.map((point) => point.costUsd),
+      inputCost: processedPoints.map((point) => point.inputCostUsd ?? 0),
+      cacheCost: processedPoints.map((point) => point.cacheCostUsd ?? 0),
+      outputCost: processedPoints.map((point) => point.outputCostUsd ?? 0)
     };
     const series = [
       makeSeries(t("Total tokens"), values.total, colors[0], 3),
       makeSeries(t("Input"), values.input, colors[1]),
       makeSeries(t("Output"), values.output, colors[2]),
       makeSeries(t("Cache"), values.cache, colors[3]),
-      makeSeries(t("Cost"), values.cost, colors[4], 2.5)
+      makeSeries(t("Cost"), values.cost, colors[4], 2.5, formatCostUsd)
     ];
-    visibleSeries = trendFilter === "cost" ? [series[4]] : trendFilter === "tokens" ? series.slice(0, 4) : series;
+    const costSeries = [
+      makeSeries(t("Input cost"), values.inputCost, colors[1], 2, formatCostUsd),
+      makeSeries(t("Cache cost"), values.cacheCost, colors[3], 2, formatCostUsd),
+      makeSeries(t("Output cost"), values.outputCost, colors[2], 2, formatCostUsd)
+    ];
+    visibleSeries = trendFilter === "cost" ? costSeries : trendFilter === "tokens" ? series.slice(0, 4) : series;
   }
+
+  const dailyTokenPercentageTooltipFormatter = trendMode === "daily" && (trendFilter === "tokens" || trendFilter === "all")
+    ? createDailyTokenPercentageTooltipFormatter(processedPoints, t, language)
+    : undefined;
+  const dailyModelPercentageTooltipFormatter = trendMode === "daily" && trendFilter === "model"
+    ? createDailyModelPercentageTooltipFormatter(modelRatios, language)
+    : undefined;
 
   return {
     backgroundColor: theme === "dark" ? "#0d1b2e" : "#ffffff",
@@ -349,7 +428,15 @@ export function createTrendChartOption(
       backgroundColor: theme === "dark" ? "#0d213f" : "#ffffff",
       borderColor: axisLineColor,
       textStyle: { color: theme === "dark" ? "#f5f7fa" : "#0b1830" },
-      valueFormatter: isRatio ? (value: any) => `${value}%` : undefined
+      ...(dailyModelPercentageTooltipFormatter || dailyTokenPercentageTooltipFormatter
+        ? { formatter: dailyModelPercentageTooltipFormatter ?? dailyTokenPercentageTooltipFormatter }
+        : {
+            valueFormatter: isRatio
+              ? (value: number | string) => `${value}%`
+              : trendFilter === "cost"
+              ? formatCostUsd
+              : undefined
+          })
     },
     legend: { top: 0, right: 0, textStyle: { color: textColor } },
     xAxis: {
@@ -364,7 +451,11 @@ export function createTrendChartOption(
       max: isRatio ? 100 : undefined,
       axisLabel: {
         color: textColor,
-        formatter: (value: number) => isRatio ? `${value}%` : compactNumber(value, language)
+        formatter: (value: number) => isRatio
+          ? `${value}%`
+          : trendFilter === "cost"
+          ? formatCostUsd(value)
+          : compactNumber(value, language)
       },
       splitLine: { lineStyle: { color: splitLineColor } }
     },
@@ -372,13 +463,20 @@ export function createTrendChartOption(
   };
 }
 
-function makeSeries(name: string, data: number[], color: string, width = 2) {
+function makeSeries(
+  name: string,
+  data: number[],
+  color: string,
+  width = 2,
+  valueFormatter?: (value: number | string) => string
+) {
   return {
     name,
     type: "line",
     smooth: true,
     data,
     symbolSize: 5,
+    ...(valueFormatter ? { tooltip: { valueFormatter } } : {}),
     itemStyle: { color },
     lineStyle: { width },
     areaStyle: {
@@ -397,9 +495,115 @@ function makeSeries(name: string, data: number[], color: string, width = 2) {
   };
 }
 
+function formatCostUsd(value: number | string): string {
+  return `$${Number(value).toFixed(2)}`;
+}
+
+type AxisTooltipParam = {
+  axisValueLabel?: string;
+  data?: number | string;
+  dataIndex?: number;
+  marker?: string;
+  name?: string;
+  seriesName?: string;
+  value?: number | string;
+};
+
+type PieTooltipParam = {
+  marker?: string;
+  name?: string;
+  percent?: number;
+  value?: number | string;
+};
+
+function createDailyModelPercentageTooltipFormatter(
+  modelRatios: ModelRatioResponse,
+  language: Language
+) {
+  return (params: AxisTooltipParam | AxisTooltipParam[]) => {
+    const items = Array.isArray(params) ? params : [params];
+    const dataIndex = Number(items[0]?.dataIndex ?? 0);
+    const day = modelRatios.daily[dataIndex];
+    const totalTokens = day?.models.reduce((sum, item) => sum + item.totalTokens, 0) ?? 0;
+    const title = items[0]?.axisValueLabel ?? items[0]?.name ?? (day ? formatUtcDateLabel(day.day) : "");
+    const rows = [`<strong>${escapeHtml(String(title))}</strong>`];
+
+    for (const item of items) {
+      const rawValue = Number(item.value ?? item.data ?? 0);
+      const percentage = totalTokens > 0 ? rawValue / totalTokens : 0;
+      rows.push(
+        `${item.marker ?? ""}${escapeHtml(item.seriesName ?? "")}: ${escapeHtml(formatTokenValue(rawValue, language))} Token (${formatPercent(percentage)})`
+      );
+    }
+
+    return rows.join("<br/>");
+  };
+}
+
+function createDailyTokenPercentageTooltipFormatter(points: TrendPoint[], t: Translate, language: Language) {
+  const inputName = t("Input");
+  const outputName = t("Output");
+  const cacheName = t("Cache");
+  const costName = t("Cost");
+  const tokenSeriesNames = new Set([inputName, outputName, cacheName]);
+
+  return (params: AxisTooltipParam | AxisTooltipParam[]) => {
+    const items = Array.isArray(params) ? params : [params];
+    const dataIndex = Number(items[0]?.dataIndex ?? 0);
+    const point = points[dataIndex];
+    const tokenTotal = point
+      ? point.inputTokens + point.outputTokens + point.cacheReadTokens + point.cacheWriteTokens
+      : 0;
+    const percentages: Record<string, number> = point && tokenTotal > 0
+      ? {
+          [inputName]: point.inputTokens / tokenTotal,
+          [outputName]: point.outputTokens / tokenTotal,
+          [cacheName]: (point.cacheReadTokens + point.cacheWriteTokens) / tokenTotal
+        }
+      : {};
+
+    const title = items[0]?.axisValueLabel ?? items[0]?.name ?? (point ? formatUtcDateLabel(point.day) : "");
+    const rows = [`<strong>${escapeHtml(String(title))}</strong>`];
+
+    for (const item of items) {
+      const seriesName = item.seriesName ?? "";
+      const rawValue = item.value ?? item.data ?? 0;
+      const formattedValue = seriesName === costName
+        ? formatCostUsd(rawValue)
+        : formatTokenValue(rawValue, language);
+      const percentage = tokenSeriesNames.has(seriesName) && percentages[seriesName] !== undefined
+        ? ` (${formatPercent(percentages[seriesName])})`
+        : "";
+
+      rows.push(`${item.marker ?? ""}${escapeHtml(seriesName)}: ${escapeHtml(formattedValue)}${percentage}`);
+    }
+
+    return rows.join("<br/>");
+  };
+}
+
+function formatTokenValue(value: number | string, language: Language): string {
+  const locales: Record<Language, string> = { zh: "zh-CN", ja: "ja-JP", en: "en-US", ko: "ko-KR" };
+  return Number(value).toLocaleString(locales[language], { maximumFractionDigits: 0 });
+}
+
+function formatPercent(value: number): string {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 function TrendChart({
   points,
   projectRatios,
+  modelRatios,
   initialLoading,
   language,
   t,
@@ -409,6 +613,7 @@ function TrendChart({
 }: {
   points: TrendPoint[];
   projectRatios: ProjectRatioResponse;
+  modelRatios: ModelRatioResponse;
   initialLoading: boolean;
   language: Language;
   t: Translate;
@@ -417,14 +622,18 @@ function TrendChart({
   trendFilter: TrendFilter;
 }) {
   const chartElement = useRef<HTMLDivElement | null>(null);
-  const hasData = trendFilter === "project-ratio"
+  const hasData = trendFilter === "model"
+    ? trendMode === "daily"
+      ? modelRatios.daily.some((point) => point.models.some((item) => item.totalTokens > 0))
+      : modelRatios.total.some((item) => item.totalTokens > 0)
+    : trendFilter === "project-ratio"
     ? trendMode === "daily"
       ? projectRatios.daily.length > 0
       : projectRatios.total.length > 0
     : points.length > 0;
   const chartOption = useMemo(
-    () => createTrendChartOption(points, t, language, theme, trendMode, trendFilter, projectRatios),
-    [language, points, projectRatios, t, theme, trendMode, trendFilter]
+    () => createTrendChartOption(points, t, language, theme, trendMode, trendFilter, projectRatios, modelRatios),
+    [language, modelRatios, points, projectRatios, t, theme, trendMode, trendFilter]
   );
 
   useEffect(() => {
@@ -444,7 +653,13 @@ function TrendChart({
   if (!hasData) {
     return (
       <div className="chart-empty">
-        {t(trendFilter === "project-ratio" ? "No project usage" : "No trend data for this range.")}
+        {t(
+          trendFilter === "project-ratio"
+            ? "No project usage"
+            : trendFilter === "model"
+            ? "No model usage"
+            : "No trend data for this range."
+        )}
       </div>
     );
   }
