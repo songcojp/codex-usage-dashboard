@@ -58,7 +58,8 @@ describe("public database baseline", () => {
       "0001_initial.sql",
       "0002_bigint_usage_counters.sql",
       "0003_usage_event_task_ids.sql",
-      "0004_task_metadata.sql"
+      "0004_task_metadata.sql",
+      "0005_current_model_prices.sql"
     ]);
     for (const table of ["usage_events", "daily_usage_rollups"]) {
       expect(bigintMigrationSql).toContain(`ALTER TABLE "${table}"`);

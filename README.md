@@ -116,6 +116,8 @@ docker compose --env-file .env -f deploy/docker-compose.yml exec -T server node 
 
 The database is not published to the host. Caddy binds to `127.0.0.1` by default. Set `CADDY_SITE_ADDRESS` and `PUBLIC_BASE_URL` for your HTTPS hostname, and set `TRUST_PROXY` to the exact proxy address or CIDR. Multi-instance deployments must replace the in-memory admin login limiter with a shared limiter.
 
+The model price table is seeded with published OpenAI API Standard, short-context text rates per million tokens, using 30-minute cache writes. Administrators can edit prices in the dashboard; the current-model price migration preserves existing custom prices. These rates estimate API usage and do not represent Codex subscription charges. Adding a price does not recalculate costs already saved for historical events.
+
 ## GitHub deployment
 
 The deployment job uses the protected `production` Environment and is disabled unless Environment variable `DEPLOY_ENABLED` equals `true`.
